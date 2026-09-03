@@ -55,11 +55,23 @@ export class Overlays {
     if (!m.getSource("ov-airports")) {
       m.addSource("ov-airports", { type: "geojson", data: EMPTY as any });
     }
+    // buffer/tolerance: keep circle outlines intact across internal vector-tile
+    // seams (default simplification + small buffer chews gaps into big rings).
     if (!m.getSource("ov-rings")) {
-      m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
+      m.addSource("ov-rings", {
+        type: "geojson",
+        data: EMPTY as any,
+        buffer: 512,
+        tolerance: 0,
+      });
     }
     if (!m.getSource("ov-fences")) {
-      m.addSource("ov-fences", { type: "geojson", data: EMPTY as any });
+      m.addSource("ov-fences", {
+        type: "geojson",
+        data: EMPTY as any,
+        buffer: 512,
+        tolerance: 0,
+      });
     }
 
     const add = (layer: any) => {
@@ -114,16 +126,20 @@ export class Overlays {
       id: "ov-fences-fill",
       type: "fill",
       source: "ov-fences",
+      filter: ["==", ["geometry-type"], "Polygon"],
       paint: {
         "fill-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
         "fill-opacity": ["case", ["get", "enabled"], 0.14, 0.05],
       },
     });
     // Dark casing under the bright outline so the ring reads on any basemap.
+    // Stroke the explicit LineString ring, not the polygon outline — MapLibre
+    // drops chunks of a *polygon's* derived outline where it crosses tile edges.
     add({
       id: "ov-fences-casing",
       type: "line",
       source: "ov-fences",
+      filter: ["==", ["geometry-type"], "LineString"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#0d1117",
@@ -135,6 +151,7 @@ export class Overlays {
       id: "ov-fences-line",
       type: "line",
       source: "ov-fences",
+      filter: ["==", ["geometry-type"], "LineString"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": ["case", ["get", "enabled"], "#ffd23f", "#b0b4ba"],
@@ -369,10 +386,16 @@ export class Overlays {
     const features: any[] = [];
     for (const f of fences) {
       const ring = circle(f.lat, f.lon, f.radiusNm);
+      // Polygon for the fill, a separate LineString for the outline.
       features.push({
         type: "Feature",
         properties: { enabled: f.enabled, label: f.label },
         geometry: { type: "Polygon", coordinates: [ring] },
+      });
+      features.push({
+        type: "Feature",
+        properties: { enabled: f.enabled, label: f.label },
+        geometry: { type: "LineString", coordinates: ring },
       });
       const [lon, lat] = destination(f.lat, f.lon, f.radiusNm, 0);
       features.push({
