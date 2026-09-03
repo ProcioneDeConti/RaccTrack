@@ -83,15 +83,30 @@ export class Overlays {
       },
     });
 
+    // Old blurred-glow fence outline — remove if a prior build left it behind.
+    if (m.getLayer("ov-fences-glow")) m.removeLayer("ov-fences-glow");
+
+    add({
+      id: "ov-rings-casing",
+      type: "line",
+      source: "ov-rings",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#0d1117",
+        "line-width": 3.5,
+        "line-opacity": 0.5,
+      },
+    });
     add({
       id: "ov-rings-line",
       type: "line",
       source: "ov-rings",
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#8ab4f8",
-        "line-width": 1,
-        "line-dasharray": [2, 3],
-        "line-opacity": 0.7,
+        "line-color": "#9ec5ff",
+        "line-width": 1.6,
+        "line-dasharray": [3, 3],
+        "line-opacity": 0.95,
       },
     });
 
@@ -101,28 +116,30 @@ export class Overlays {
       source: "ov-fences",
       paint: {
         "fill-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
-        "fill-opacity": ["case", ["get", "enabled"], 0.1, 0.04],
+        "fill-opacity": ["case", ["get", "enabled"], 0.14, 0.05],
       },
     });
+    // Dark casing under the bright outline so the ring reads on any basemap.
     add({
-      id: "ov-fences-glow",
+      id: "ov-fences-casing",
       type: "line",
       source: "ov-fences",
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
+        "line-color": "#0d1117",
         "line-width": 6,
-        "line-blur": 4,
-        "line-opacity": ["case", ["get", "enabled"], 0.35, 0.15],
+        "line-opacity": 0.65,
       },
     });
     add({
       id: "ov-fences-line",
       type: "line",
       source: "ov-fences",
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": ["case", ["get", "enabled"], "#ffdf6b", "#9a9a9a"],
-        "line-width": 2,
-        "line-opacity": ["case", ["get", "enabled"], 1, 0.6],
+        "line-color": ["case", ["get", "enabled"], "#ffd23f", "#b0b4ba"],
+        "line-width": 2.8,
+        "line-opacity": 1,
       },
     });
     add({
@@ -246,6 +263,7 @@ export class Overlays {
     set("ov-airspace-line", layers.airspace);
     set("ov-airport-dot", layers.airports);
     set("ov-airport-label", layers.airports);
+    set("ov-rings-casing", layers.rangeRings);
     set("ov-rings-line", layers.rangeRings);
     set("ov-rings-label", layers.rangeRings);
     // Fences follow the airspace toggle? No — always visible when they exist.
@@ -424,7 +442,13 @@ function destination(
 }
 
 function circle(lat: number, lon: number, radiusNm: number): [number, number][] {
+  const steps = 128;
   const pts: [number, number][] = [];
-  for (let i = 0; i <= 120; i++) pts.push(destination(lat, lon, radiusNm, i * 3));
+  for (let i = 0; i < steps; i++) {
+    pts.push(destination(lat, lon, radiusNm, (i * 360) / steps));
+  }
+  // Close the ring with a vertex identical to the first — MapLibre leaves a
+  // notch at the seam when a polygon's first/last points only *nearly* match.
+  pts.push([pts[0][0], pts[0][1]]);
   return pts;
 }
