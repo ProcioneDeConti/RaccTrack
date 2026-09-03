@@ -55,23 +55,17 @@ export class Overlays {
     if (!m.getSource("ov-airports")) {
       m.addSource("ov-airports", { type: "geojson", data: EMPTY as any });
     }
-    // buffer/tolerance: keep circle outlines intact across internal vector-tile
-    // seams (default simplification + small buffer chews gaps into big rings).
     if (!m.getSource("ov-rings")) {
-      m.addSource("ov-rings", {
-        type: "geojson",
-        data: EMPTY as any,
-        buffer: 512,
-        tolerance: 0,
-      });
+      m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
     }
+    // Fence fill (polygons) and fence outline (linestrings) live in separate
+    // sources: MapLibre mangles a polygon-derived outline across tile seams, and
+    // mixing a polygon + a coincident linestring in one source made it worse.
     if (!m.getSource("ov-fences")) {
-      m.addSource("ov-fences", {
-        type: "geojson",
-        data: EMPTY as any,
-        buffer: 512,
-        tolerance: 0,
-      });
+      m.addSource("ov-fences", { type: "geojson", data: EMPTY as any });
+    }
+    if (!m.getSource("ov-fence-lines")) {
+      m.addSource("ov-fence-lines", { type: "geojson", data: EMPTY as any });
     }
 
     const add = (layer: any) => {
@@ -133,13 +127,12 @@ export class Overlays {
       },
     });
     // Dark casing under the bright outline so the ring reads on any basemap.
-    // Stroke the explicit LineString ring, not the polygon outline — MapLibre
-    // drops chunks of a *polygon's* derived outline where it crosses tile edges.
+    // Stroke a dedicated LineString ring (own source) — MapLibre drops chunks of
+    // a polygon's derived outline where it crosses internal tile seams.
     add({
       id: "ov-fences-casing",
       type: "line",
-      source: "ov-fences",
-      filter: ["==", ["geometry-type"], "LineString"],
+      source: "ov-fence-lines",
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#0d1117",
@@ -150,8 +143,7 @@ export class Overlays {
     add({
       id: "ov-fences-line",
       type: "line",
-      source: "ov-fences",
-      filter: ["==", ["geometry-type"], "LineString"],
+      source: "ov-fence-lines",
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": ["case", ["get", "enabled"], "#ffd23f", "#b0b4ba"],
@@ -382,29 +374,33 @@ export class Overlays {
     }[],
   ) {
     const src = this.map.getSource("ov-fences") as GeoJSONSource | undefined;
-    if (!src) return;
-    const features: any[] = [];
+    const lineSrc = this.map.getSource("ov-fence-lines") as
+      | GeoJSONSource
+      | undefined;
+    if (!src || !lineSrc) return;
+    const fill: any[] = [];
+    const lines: any[] = [];
     for (const f of fences) {
       const ring = circle(f.lat, f.lon, f.radiusNm);
-      // Polygon for the fill, a separate LineString for the outline.
-      features.push({
+      fill.push({
         type: "Feature",
         properties: { enabled: f.enabled, label: f.label },
         geometry: { type: "Polygon", coordinates: [ring] },
       });
-      features.push({
+      lines.push({
         type: "Feature",
         properties: { enabled: f.enabled, label: f.label },
         geometry: { type: "LineString", coordinates: ring },
       });
       const [lon, lat] = destination(f.lat, f.lon, f.radiusNm, 0);
-      features.push({
+      fill.push({
         type: "Feature",
         properties: { label: f.label },
         geometry: { type: "Point", coordinates: [lon, lat] },
       });
     }
-    src.setData({ type: "FeatureCollection", features } as any);
+    src.setData({ type: "FeatureCollection", features: fill } as any);
+    lineSrc.setData({ type: "FeatureCollection", features: lines } as any);
   }
 
   private airspacePopup(lngLat: any, f: MapGeoJSONFeature) {
