@@ -123,7 +123,8 @@ export class Overlays {
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: {
         "fill-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
-        "fill-opacity": ["case", ["get", "enabled"], 0.14, 0.05],
+        "fill-opacity": ["case", ["get", "enabled"], 0.2, 0.06],
+        "fill-antialias": true,
       },
     });
     // Dark casing under the bright outline so the ring reads on any basemap.
