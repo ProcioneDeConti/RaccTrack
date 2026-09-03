@@ -193,6 +193,9 @@ mod tests {
             seen_pos: None,
             position_source: PositionSource::Adsb,
             military: false,
+            interesting: false,
+            pia: false,
+            ladd: false,
             source: "test".into(),
             observed_at: t,
         }

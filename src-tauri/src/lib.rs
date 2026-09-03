@@ -4,9 +4,12 @@ mod app;
 mod commands;
 mod config;
 mod db;
+mod emergency_watch;
 mod enrich;
 mod geocode;
+mod geofence;
 mod ingest;
+mod notable;
 mod poller;
 mod region;
 mod state;
@@ -28,7 +31,9 @@ use crate::enrich::{
     aircraft_db::AircraftDb, airports::Airports, photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
 use crate::airspace::Airspace;
+use crate::emergency_watch::EmergencyWatch;
 use crate::geocode::Geocoder;
+use crate::geofence::Geofences;
 use crate::ingest::{AircraftSource, HttpV2Source};
 use crate::poller::{Poller, SourceStatus};
 use crate::state::LiveState;
@@ -116,6 +121,7 @@ pub fn run() {
             ));
 
             let alerts = Arc::new(Alerts::new(db.clone()));
+            let geofences = Arc::new(Geofences::new(db.clone()));
             let geocoder = Arc::new(Geocoder::new(db.clone(), http.clone()));
             let weather = Arc::new(Weather::new(db.clone(), http.clone()));
             let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
@@ -138,6 +144,7 @@ pub fn run() {
                 live: live.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
+                geofences: geofences.clone(),
                 tiles: tiles.clone(),
                 geocoder: geocoder.clone(),
                 weather: weather.clone(),
@@ -149,8 +156,11 @@ pub fn run() {
                 status: status.clone(),
             });
 
+            let ewatch = Arc::new(EmergencyWatch::new(http.clone(), settings.clone()));
+            tauri::async_runtime::spawn(ewatch.run(handle.clone()));
+
             let poller = Arc::new(Poller::new(
-                live, enricher, alerts, sources, settings, viewport, status,
+                live, enricher, alerts, geofences, sources, settings, viewport, status,
             ));
             tauri::async_runtime::spawn(poller.run(handle));
 
@@ -180,6 +190,11 @@ pub fn run() {
             commands::metars_in,
             commands::station_wx,
             commands::airspace_in,
+            commands::list_presets,
+            commands::list_geofences,
+            commands::add_geofence,
+            commands::remove_geofence,
+            commands::set_geofence_enabled,
         ])
         .build(tauri::generate_context!())
         .expect("build tauri app")

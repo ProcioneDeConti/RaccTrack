@@ -78,9 +78,10 @@ impl Enricher {
         if ac.description.is_none() {
             ac.description = meta.description.clone();
         }
-        if meta.military {
-            ac.military = true;
-        }
+        ac.military |= meta.military;
+        ac.interesting |= meta.interesting;
+        ac.pia |= meta.pia;
+        ac.ladd |= meta.ladd;
         meta.owner.clone()
     }
 

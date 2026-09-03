@@ -19,6 +19,9 @@ pub struct AircraftMeta {
     pub owner: Option<String>,
     pub year: Option<String>,
     pub military: bool,
+    pub interesting: bool,
+    pub pia: bool,
+    pub ladd: bool,
 }
 
 pub struct AircraftDb {
@@ -54,6 +57,9 @@ impl AircraftDb {
                 year: non_empty(f.get(5)),
                 owner: non_empty(f.get(6)).map(strip_miscode),
                 military: flags & 1 != 0,
+                interesting: flags & 2 != 0,
+                pia: flags & 4 != 0,
+                ladd: flags & 8 != 0,
             };
             by_hex.insert(hex, meta);
         }

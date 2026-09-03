@@ -21,6 +21,7 @@ pub enum WatchKind {
     Registration,
     Type,
     Callsign,
+    Preset,
 }
 
 impl WatchKind {
@@ -30,6 +31,7 @@ impl WatchKind {
             WatchKind::Registration => "registration",
             WatchKind::Type => "type",
             WatchKind::Callsign => "callsign",
+            WatchKind::Preset => "preset",
         }
     }
     fn parse(s: &str) -> Option<Self> {
@@ -38,6 +40,7 @@ impl WatchKind {
             "registration" => Some(WatchKind::Registration),
             "type" => Some(WatchKind::Type),
             "callsign" => Some(WatchKind::Callsign),
+            "preset" => Some(WatchKind::Preset),
             _ => None,
         }
     }
@@ -73,6 +76,7 @@ impl WatchEntry {
                 .as_deref()
                 .map(|f| f.eq_ignore_ascii_case(v))
                 .unwrap_or(false),
+            WatchKind::Preset => crate::notable::matches(v, ac),
         }
     }
 }
@@ -220,14 +224,22 @@ impl Alerts {
 
             for w in watches.iter().filter(|w| w.enabled) {
                 if w.matches(ac) && self.mark(&ac.hex, w.id) {
-                    out.push(AlertEvent {
-                        hex: ac.hex.clone(),
-                        reason: format!(
+                    let reason = if w.kind == WatchKind::Preset {
+                        format!(
+                            "{} aircraft",
+                            crate::notable::label_for(&w.value).unwrap_or(&w.value)
+                        )
+                    } else {
+                        format!(
                             "watch {} = {}{}",
                             w.kind.as_str(),
                             w.value,
                             w.label.as_deref().map(|l| format!(" ({l})")).unwrap_or_default()
-                        ),
+                        )
+                    };
+                    out.push(AlertEvent {
+                        hex: ac.hex.clone(),
+                        reason,
                         watch_id: Some(w.id),
                         emergency: false,
                         at: now,
@@ -282,6 +294,9 @@ mod tests {
             seen_pos: None,
             position_source: PositionSource::Adsb,
             military: false,
+            interesting: false,
+            pia: false,
+            ladd: false,
             source: "t".into(),
             observed_at: 0,
         }

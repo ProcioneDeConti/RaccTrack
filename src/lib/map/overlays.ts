@@ -58,6 +58,9 @@ export class Overlays {
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
     }
+    if (!m.getSource("ov-fences")) {
+      m.addSource("ov-fences", { type: "geojson", data: EMPTY as any });
+    }
 
     const add = (layer: any) => {
       if (!m.getLayer(layer.id)) m.addLayer(layer, beforeId);
@@ -89,6 +92,53 @@ export class Overlays {
         "line-width": 1,
         "line-dasharray": [2, 3],
         "line-opacity": 0.7,
+      },
+    });
+
+    add({
+      id: "ov-fences-fill",
+      type: "fill",
+      source: "ov-fences",
+      paint: {
+        "fill-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
+        "fill-opacity": ["case", ["get", "enabled"], 0.1, 0.04],
+      },
+    });
+    add({
+      id: "ov-fences-glow",
+      type: "line",
+      source: "ov-fences",
+      paint: {
+        "line-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
+        "line-width": 6,
+        "line-blur": 4,
+        "line-opacity": ["case", ["get", "enabled"], 0.35, 0.15],
+      },
+    });
+    add({
+      id: "ov-fences-line",
+      type: "line",
+      source: "ov-fences",
+      paint: {
+        "line-color": ["case", ["get", "enabled"], "#ffdf6b", "#9a9a9a"],
+        "line-width": 2,
+        "line-opacity": ["case", ["get", "enabled"], 1, 0.6],
+      },
+    });
+    add({
+      id: "ov-fences-label",
+      type: "symbol",
+      source: "ov-fences",
+      filter: ["==", ["geometry-type"], "Point"],
+      layout: {
+        "text-field": ["get", "label"],
+        "text-size": 10,
+        "text-font": ["Noto Sans Regular", "Open Sans Regular"],
+      },
+      paint: {
+        "text-color": "#f9c74f",
+        "text-halo-color": "#0d1117",
+        "text-halo-width": 1.2,
       },
     });
     add({
@@ -198,6 +248,7 @@ export class Overlays {
     set("ov-airport-label", layers.airports);
     set("ov-rings-line", layers.rangeRings);
     set("ov-rings-label", layers.rangeRings);
+    // Fences follow the airspace toggle? No — always visible when they exist.
   }
 
   async refresh(bbox: Bbox, layers: MapLayers) {
@@ -286,6 +337,35 @@ export class Overlays {
     src.setData({ type: "FeatureCollection", features } as any);
   }
 
+  setGeofences(
+    fences: {
+      label: string;
+      lat: number;
+      lon: number;
+      radiusNm: number;
+      enabled: boolean;
+    }[],
+  ) {
+    const src = this.map.getSource("ov-fences") as GeoJSONSource | undefined;
+    if (!src) return;
+    const features: any[] = [];
+    for (const f of fences) {
+      const ring = circle(f.lat, f.lon, f.radiusNm);
+      features.push({
+        type: "Feature",
+        properties: { enabled: f.enabled, label: f.label },
+        geometry: { type: "Polygon", coordinates: [ring] },
+      });
+      const [lon, lat] = destination(f.lat, f.lon, f.radiusNm, 0);
+      features.push({
+        type: "Feature",
+        properties: { label: f.label },
+        geometry: { type: "Point", coordinates: [lon, lat] },
+      });
+    }
+    src.setData({ type: "FeatureCollection", features } as any);
+  }
+
   private airspacePopup(lngLat: any, f: MapGeoJSONFeature) {
     const p = f.properties ?? {};
     const cat = String(p.category ?? "");
@@ -345,6 +425,6 @@ function destination(
 
 function circle(lat: number, lon: number, radiusNm: number): [number, number][] {
   const pts: [number, number][] = [];
-  for (let i = 0; i <= 72; i++) pts.push(destination(lat, lon, radiusNm, i * 5));
+  for (let i = 0; i <= 120; i++) pts.push(destination(lat, lon, radiusNm, i * 3));
   return pts;
 }

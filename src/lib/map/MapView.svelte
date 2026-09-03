@@ -36,6 +36,7 @@
     followHex,
     flyTo,
     mapBounds,
+    geofences,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
   import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
@@ -59,6 +60,7 @@
   let overlayTimer: number | undefined;
   let unsubLayers: (() => void) | undefined;
   let unsubRings: (() => void) | undefined;
+  let unsubFences: (() => void) | undefined;
   let unsubFollow: (() => void) | undefined;
   let unsubFly: (() => void) | undefined;
   let unsubAircraft: (() => void) | undefined;
@@ -227,6 +229,7 @@
     try {
       overlays?.install();
       overlays?.setVisibility(curLayers);
+      overlays?.setGeofences(get(geofences) as any);
     } catch (e) {
       console.error("[diag] overlays install failed:", (e as Error)?.message ?? e);
     }
@@ -539,6 +542,7 @@
       refreshOverlays();
     });
     unsubRings = rangeRingsNm.subscribe(drawRings);
+    unsubFences = geofences.subscribe((f) => overlays?.setGeofences(f as any));
 
     // Home location: seed from settings (initial camera is already set above),
     // drop the marker, and react to later changes.
@@ -636,6 +640,7 @@
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();
+    unsubFences?.();
     unsubFollow?.();
     unsubFly?.();
     unsubAircraft?.();

@@ -20,14 +20,18 @@
     goHomeSignal,
     pinned,
     visibleAircraft,
+    emergencyCount,
+    geofences,
   } from "./lib/state";
   import {
     onDiff,
     onAlert,
     onSourceStatus,
+    onEmergencyCount,
     getSnapshot,
     getSourceStatus,
     getSettings,
+    listGeofences,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { units } from "./lib/format";
@@ -54,6 +58,7 @@
       }),
     );
     unlisteners.push(onSourceStatus((s) => sourceStatus.set(s)));
+    unlisteners.push(onEmergencyCount((n) => emergencyCount.set(n)));
 
     (async () => {
       try {
@@ -76,6 +81,11 @@
         /* ignore */
       }
       await refreshWatch();
+      try {
+        geofences.set(await listGeofences());
+      } catch {
+        /* ignore */
+      }
     })();
 
     return () => {

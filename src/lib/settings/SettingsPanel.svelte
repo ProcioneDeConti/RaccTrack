@@ -223,6 +223,15 @@
       />
     </label>
 
+    <label class="row">
+      <span>NA-wide emergency-squawk watch</span>
+      <input
+        type="checkbox"
+        checked={s.emergencyWatchEnabled}
+        on:change={(e) => patch({ emergencyWatchEnabled: e.currentTarget.checked })}
+      />
+    </label>
+
     <hr />
 
     <label class="row">
@@ -264,11 +273,6 @@
       <p class="muted">Download complete.</p>
     {/if}
 
-    <hr />
-    <p class="note">
-      Coverage depends on volunteer ADS-B receivers and is best over land in North
-      America. There is no free source for scheduled times, gates, or delay status.
-    </p>
   {/if}
 </aside>
 
@@ -322,11 +326,6 @@
   }
   .muted {
     color: var(--text-dim);
-  }
-  .note {
-    font-size: 11px;
-    color: var(--text-dim);
-    margin: 0;
   }
   .hdr {
     font-size: 11px;

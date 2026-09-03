@@ -138,6 +138,40 @@ pub async fn airspace_in(
     state.airspace.in_area(bbox).await.map_err(err)
 }
 
+// --- notable presets + geofences ---
+
+#[tauri::command]
+pub fn list_presets() -> Vec<crate::notable::Preset> {
+    crate::notable::presets()
+}
+
+#[tauri::command]
+pub fn list_geofences(state: State<AppState>) -> CmdResult<Vec<crate::geofence::Geofence>> {
+    state.geofences.list().map_err(err)
+}
+
+#[tauri::command]
+pub fn add_geofence(
+    state: State<AppState>,
+    fence: crate::geofence::Geofence,
+) -> CmdResult<crate::geofence::Geofence> {
+    state.geofences.add(&fence).map_err(err)
+}
+
+#[tauri::command]
+pub fn remove_geofence(state: State<AppState>, id: i64) -> CmdResult<()> {
+    state.geofences.remove(id).map_err(err)
+}
+
+#[tauri::command]
+pub fn set_geofence_enabled(
+    state: State<AppState>,
+    id: i64,
+    enabled: bool,
+) -> CmdResult<()> {
+    state.geofences.set_enabled(id, enabled).map_err(err)
+}
+
 // --- watchlist ---
 
 #[tauri::command]

@@ -11,6 +11,8 @@ export const selectedHex = writable<string | null>(null);
 export const hoveredHex = writable<string | null>(null);
 export const filters = writable<Filters>(defaultFilters());
 export const sourceStatus = writable<SourceStatus | null>(null);
+/** count of aircraft squawking an emergency code anywhere in North America */
+export const emergencyCount = writable(0);
 export const basemap = writable<string>("darkMatter");
 
 import type { HomeLocation, MapLayers } from "./api/types";
@@ -35,6 +37,10 @@ export const pinned = writable<string[]>([]);
 export const flyTo = writable<{ lat: number; lon: number; zoom?: number } | null>(
   null,
 );
+import type { Geofence } from "./api/types";
+/** geofences, kept in sync so the map can draw them */
+export const geofences = writable<Geofence[]>([]);
+
 /** current map viewport bounds (updated by MapView) */
 export const mapBounds = writable<{
   west: number;

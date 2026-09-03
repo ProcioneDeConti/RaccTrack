@@ -154,11 +154,6 @@
       </dl>
     </section>
 
-    <section class="unavail">
-      <h4>Not available (no free source)</h4>
-      <p class="muted">Scheduled times · gate / stand · delay &amp; cancellation status</p>
-    </section>
-
     <footer>
       <div class="btnrow">
         <button

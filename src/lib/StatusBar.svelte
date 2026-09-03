@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { total, lastUpdate, sourceStatus, aircraft } from "./state";
+  import {
+    total,
+    lastUpdate,
+    sourceStatus,
+    aircraft,
+    emergencyCount,
+  } from "./state";
 
   let ageStr = "—";
   const tick = setInterval(() => {
@@ -22,8 +28,11 @@
   {#if $sourceStatus}
     <span class="muted">{$sourceStatus.requestsLastMinute} req/min</span>
   {/if}
+  {#if $emergencyCount > 0}
+    <span class="emg">⚠ {$emergencyCount} emergency squawk{$emergencyCount > 1 ? "s" : ""} (NA)</span>
+  {/if}
   <span class="spacer"></span>
-  <span class="muted">North America coverage · no schedule / gate / delay data (no free source)</span>
+  <span class="muted">North America coverage</span>
 </footer>
 
 <style>
@@ -44,6 +53,10 @@
   }
   .src.bad {
     color: var(--emergency);
+  }
+  .emg {
+    color: var(--emergency);
+    font-weight: 700;
   }
   .spacer {
     flex: 1;

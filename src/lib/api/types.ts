@@ -33,7 +33,27 @@ export interface Aircraft {
   seenPos: number | null; // seconds since last position
   positionSource: PositionSource;
   military: boolean;
+  interesting: boolean;
+  pia: boolean;
+  ladd: boolean;
   source: string; // "adsb.lol" | "adsb.fi" | "local"
+}
+
+export interface Preset {
+  id: string;
+  label: string;
+  blurb: string;
+}
+
+export interface Geofence {
+  id: number;
+  label: string;
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  maxAltFt: number | null;
+  milOnly: boolean;
+  enabled: boolean;
 }
 
 export type PositionSource = "adsb" | "mlat" | "tisb" | "other";
@@ -158,7 +178,12 @@ export interface MapLayers {
   rangeRings: boolean;
 }
 
-export type WatchKind = "hex" | "registration" | "type" | "callsign";
+export type WatchKind =
+  | "hex"
+  | "registration"
+  | "type"
+  | "callsign"
+  | "preset";
 
 export interface WatchEntry {
   id: number;

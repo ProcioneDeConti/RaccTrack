@@ -125,6 +125,9 @@ pub struct Aircraft {
     pub seen_pos: Option<f64>,
     pub position_source: PositionSource,
     pub military: bool,
+    pub interesting: bool,
+    pub pia: bool,
+    pub ladd: bool,
     pub source: String,
 
     /// epoch millis when this snapshot was observed by us.
@@ -168,7 +171,11 @@ impl Aircraft {
             PositionSource::Other
         };
 
-        let military = raw.db_flags.map(|f| f & 1 == 1).unwrap_or(false);
+        let flags = raw.db_flags.unwrap_or(0);
+        let military = flags & 1 == 1;
+        let interesting = flags & 2 == 2;
+        let pia = flags & 4 == 4;
+        let ladd = flags & 8 == 8;
 
         Some(Aircraft {
             hex,
@@ -202,6 +209,9 @@ impl Aircraft {
             seen_pos: raw.seen_pos,
             position_source,
             military,
+            interesting,
+            pia,
+            ladd,
             source: source.to_string(),
             observed_at: now_ms,
         })
