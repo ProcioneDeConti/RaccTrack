@@ -58,14 +58,11 @@ export class Overlays {
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
     }
-    // Fence fill (polygons) and fence outline (linestrings) live in separate
-    // sources: MapLibre mangles a polygon-derived outline across tile seams, and
-    // mixing a polygon + a coincident linestring in one source made it worse.
+    // Geofences are drawn as `circle` layers (GPU point sprites, radius kept
+    // metric via a base-2 zoom interpolation) — a polygon/line circle rendered
+    // through geojson-vt tiling drops or inverts fill chunks at tile seams.
     if (!m.getSource("ov-fences")) {
       m.addSource("ov-fences", { type: "geojson", data: EMPTY as any });
-    }
-    if (!m.getSource("ov-fence-lines")) {
-      m.addSource("ov-fence-lines", { type: "geojson", data: EMPTY as any });
     }
 
     const add = (layer: any) => {
@@ -89,8 +86,16 @@ export class Overlays {
       },
     });
 
-    // Old blurred-glow fence outline — remove if a prior build left it behind.
-    if (m.getLayer("ov-fences-glow")) m.removeLayer("ov-fences-glow");
+    // Retired fence layers from earlier polygon/line attempts.
+    for (const id of [
+      "ov-fences-glow",
+      "ov-fences-fill",
+      "ov-fences-casing",
+      "ov-fences-line",
+    ]) {
+      if (m.getLayer(id)) m.removeLayer(id);
+    }
+    if (m.getSource("ov-fence-lines")) m.removeSource("ov-fence-lines");
 
     add({
       id: "ov-rings-casing",
@@ -116,47 +121,52 @@ export class Overlays {
       },
     });
 
+    // circle-radius as an exponential-base-2 zoom interpolation of the radius in
+    // pixels at zoom 0 (rPx0) reproduces a constant ground radius at every zoom.
+    const metricRadius: any = [
+      "interpolate",
+      ["exponential", 2],
+      ["zoom"],
+      0,
+      ["get", "rPx0"],
+      24,
+      ["*", ["get", "rPx0"], 16777216], // 2^24
+    ];
+    const discFilter: any = ["==", ["get", "role"], "disc"];
+
     add({
-      id: "ov-fences-fill",
-      type: "fill",
+      id: "ov-fences-disc-casing",
+      type: "circle",
       source: "ov-fences",
-      filter: ["==", ["geometry-type"], "Polygon"],
+      filter: discFilter,
       paint: {
-        "fill-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
-        "fill-opacity": ["case", ["get", "enabled"], 0.2, 0.06],
-        "fill-antialias": true,
-      },
-    });
-    // Dark casing under the bright outline so the ring reads on any basemap.
-    // Stroke a dedicated LineString ring (own source) — MapLibre drops chunks of
-    // a polygon's derived outline where it crosses internal tile seams.
-    add({
-      id: "ov-fences-casing",
-      type: "line",
-      source: "ov-fence-lines",
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: {
-        "line-color": "#0d1117",
-        "line-width": 6,
-        "line-opacity": 0.65,
+        "circle-radius": metricRadius,
+        "circle-color": "#000000",
+        "circle-opacity": 0,
+        "circle-stroke-color": "#0d1117",
+        "circle-stroke-width": 5,
+        "circle-stroke-opacity": 0.6,
       },
     });
     add({
-      id: "ov-fences-line",
-      type: "line",
-      source: "ov-fence-lines",
-      layout: { "line-cap": "round", "line-join": "round" },
+      id: "ov-fences-disc",
+      type: "circle",
+      source: "ov-fences",
+      filter: discFilter,
       paint: {
-        "line-color": ["case", ["get", "enabled"], "#ffd23f", "#b0b4ba"],
-        "line-width": 2.8,
-        "line-opacity": 1,
+        "circle-radius": metricRadius,
+        "circle-color": ["case", ["get", "enabled"], "#ffd23f", "#8a8a8a"],
+        "circle-opacity": ["case", ["get", "enabled"], 0.16, 0.06],
+        "circle-stroke-color": ["case", ["get", "enabled"], "#ffd23f", "#b0b4ba"],
+        "circle-stroke-width": 2.6,
+        "circle-stroke-opacity": 1,
       },
     });
     add({
       id: "ov-fences-label",
       type: "symbol",
       source: "ov-fences",
-      filter: ["==", ["geometry-type"], "Point"],
+      filter: ["==", ["get", "role"], "label"],
       layout: {
         "text-field": ["get", "label"],
         "text-size": 10,
@@ -375,33 +385,26 @@ export class Overlays {
     }[],
   ) {
     const src = this.map.getSource("ov-fences") as GeoJSONSource | undefined;
-    const lineSrc = this.map.getSource("ov-fence-lines") as
-      | GeoJSONSource
-      | undefined;
-    if (!src || !lineSrc) return;
-    const fill: any[] = [];
-    const lines: any[] = [];
+    if (!src) return;
+    const features: any[] = [];
     for (const f of fences) {
-      const ring = circle(f.lat, f.lon, f.radiusNm);
-      fill.push({
+      features.push({
         type: "Feature",
-        properties: { enabled: f.enabled, label: f.label },
-        geometry: { type: "Polygon", coordinates: [ring] },
-      });
-      lines.push({
-        type: "Feature",
-        properties: { enabled: f.enabled, label: f.label },
-        geometry: { type: "LineString", coordinates: ring },
+        properties: {
+          role: "disc",
+          enabled: f.enabled,
+          rPx0: metersToPixelsZ0(f.radiusNm * NM_TO_M, f.lat),
+        },
+        geometry: { type: "Point", coordinates: [f.lon, f.lat] },
       });
       const [lon, lat] = destination(f.lat, f.lon, f.radiusNm, 0);
-      fill.push({
+      features.push({
         type: "Feature",
-        properties: { label: f.label },
+        properties: { role: "label", label: f.label },
         geometry: { type: "Point", coordinates: [lon, lat] },
       });
     }
-    src.setData({ type: "FeatureCollection", features: fill } as any);
-    lineSrc.setData({ type: "FeatureCollection", features: lines } as any);
+    src.setData({ type: "FeatureCollection", features } as any);
   }
 
   private airspacePopup(lngLat: any, f: MapGeoJSONFeature) {
@@ -438,6 +441,12 @@ function escapeHtml(s: string): string {
 
 const NM_TO_M = 1852;
 const R_EARTH = 6371000;
+
+/** Web-Mercator ground resolution at zoom 0: metres per pixel at a latitude. */
+function metersToPixelsZ0(meters: number, lat: number): number {
+  const mppZ0 = 156543.03392 * Math.cos((lat * Math.PI) / 180);
+  return meters / mppZ0;
+}
 
 function destination(
   lat: number,
