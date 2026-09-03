@@ -33,6 +33,8 @@ pub struct RouteInfo {
     pub origin_lon: Option<f64>,
     pub destination_lat: Option<f64>,
     pub destination_lon: Option<f64>,
+    /// Epoch seconds — when hexdb's record for this flight number was last touched.
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -166,6 +168,7 @@ impl Enricher {
             origin_lon: orig.as_ref().map(|a| a.lon),
             destination_lat: dest.as_ref().map(|a| a.lat),
             destination_lon: dest.as_ref().map(|a| a.lon),
+            updated_at: r.updated_at,
         }
     }
 }

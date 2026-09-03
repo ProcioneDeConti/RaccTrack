@@ -24,10 +24,13 @@ CREATE TABLE IF NOT EXISTS watchlist (
     UNIQUE(kind, value)
 );
 
+-- v2: added updated_at (hexdb record age). Cache table — safe to rebuild.
+DROP TABLE IF EXISTS route_cache;
 CREATE TABLE IF NOT EXISTS route_cache (
     callsign   TEXT PRIMARY KEY,
     origin     TEXT,
     dest       TEXT,
+    updated_at INTEGER,
     fetched_at INTEGER NOT NULL
 );
 

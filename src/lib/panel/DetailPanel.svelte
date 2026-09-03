@@ -103,6 +103,10 @@
     );
 
     const full: [number, number][] = path;
+    const ageYears =
+      r.updatedAt != null
+        ? (Date.now() / 1000 - r.updatedAt) / (365.25 * 86400)
+        : null;
     const base = {
       total,
       known: false,
@@ -113,6 +117,8 @@
       etaHrs: null as number | null,
       line: { flown: [] as [number, number][], remain: full },
       destIcao: r.destinationIcao,
+      updatedYear: r.updatedAt != null ? new Date(r.updatedAt * 1000).getUTCFullYear() : null,
+      ageYears,
     };
 
     if (l?.lat == null || l?.lon == null) return base; // no live position
@@ -127,13 +133,18 @@
     );
 
     // hexdb route data is often stale (the flight number now flies a different
-    // pair). If the aircraft isn't anywhere near this path, don't pretend to
-    // know progress — show the route but flag it.
-    const offRoute =
+    // pair). If the aircraft is clearly not on this path — or moderately off it
+    // and the record is years old — don't pretend to know progress.
+    const clearlyOff =
       cross > Math.max(120, total * 0.35) ||
       along < -Math.max(60, total * 0.1) ||
       along > total + Math.max(60, total * 0.1);
-    if (offRoute) return { ...base, stale: true };
+    const borderlineOff =
+      cross > Math.max(60, total * 0.18) ||
+      along < -Math.max(30, total * 0.05);
+    if (clearlyOff || (borderlineOff && ageYears != null && ageYears > 3)) {
+      return { ...base, stale: true };
+    }
 
     const flown = Math.max(0, Math.min(total, along));
     const toGo = total - flown;
@@ -288,10 +299,15 @@
         {:else if prog?.stale}
           <p class="eta muted">
             {fmtDistanceNm(prog.total)} total · aircraft isn't on this path —
-            route data may be out of date.
+            route data{#if prog.updatedYear} (from {prog.updatedYear}){/if} looks out of date.
           </p>
         {:else if prog}
           <p class="eta muted">{fmtDistanceNm(prog.total)} total</p>
+        {/if}
+        {#if prog?.known && prog.updatedYear}
+          <p class="src" title="hexdb route records are keyed by flight number and can lag reality">
+            route data from {prog.updatedYear}
+          </p>
         {/if}
       {:else}
         <p class="muted">Unknown</p>
@@ -555,6 +571,11 @@
   .eta {
     margin: 4px 0 0;
     font-size: 12px;
+  }
+  .src {
+    margin: 2px 0 0;
+    font-size: 10px;
+    color: var(--text-dim);
   }
   .err {
     color: var(--emergency);

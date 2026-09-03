@@ -84,6 +84,8 @@ export interface RouteInfo {
   originLon: number | null;
   destinationLat: number | null;
   destinationLon: number | null;
+  /** epoch seconds — when hexdb's record for this flight number was last updated */
+  updatedAt: number | null;
 }
 
 export interface PhotoInfo {
