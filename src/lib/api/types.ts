@@ -1,0 +1,141 @@
+// Normalized aircraft shape emitted by the Rust backend. Mirrors
+// `src-tauri/src/ingest/model.rs::Aircraft` (serde camelCase).
+
+export interface Aircraft {
+  hex: string;
+  flight: string | null; // trimmed callsign
+  registration: string | null;
+  typeCode: string | null; // ICAO type designator, e.g. "B738"
+  description: string | null; // human model, e.g. "Boeing 737-800"
+  category: string | null; // ADS-B emitter category, e.g. "A3"
+  lat: number | null;
+  lon: number | null;
+  altBaro: number | null; // feet, null when on ground or unknown
+  altGeom: number | null;
+  onGround: boolean;
+  groundSpeed: number | null; // knots
+  ias: number | null;
+  tas: number | null;
+  mach: number | null;
+  track: number | null; // degrees true
+  magHeading: number | null;
+  trueHeading: number | null;
+  baroRate: number | null; // ft/min
+  geomRate: number | null;
+  squawk: string | null;
+  emergency: string | null; // "none" | "general" | "lifeguard" | ...
+  navAltitude: number | null; // selected altitude (MCP/FMS)
+  navHeading: number | null;
+  navQnh: number | null;
+  rssi: number | null;
+  messages: number | null;
+  seen: number | null; // seconds since last message
+  seenPos: number | null; // seconds since last position
+  positionSource: PositionSource;
+  military: boolean;
+  source: string; // "adsb.lol" | "adsb.fi" | "local"
+}
+
+export type PositionSource = "adsb" | "mlat" | "tisb" | "other";
+
+export interface AircraftDiff {
+  added: Aircraft[];
+  updated: Aircraft[];
+  removed: string[]; // hex codes
+  total: number;
+  generatedAt: number; // epoch ms
+}
+
+export interface TrailPoint {
+  lat: number;
+  lon: number;
+  altBaro: number | null;
+  onGround: boolean;
+  t: number; // epoch ms
+}
+
+export interface RouteInfo {
+  callsign: string;
+  originIcao: string | null;
+  originName: string | null;
+  destinationIcao: string | null;
+  destinationName: string | null;
+  originLat: number | null;
+  originLon: number | null;
+  destinationLat: number | null;
+  destinationLon: number | null;
+}
+
+export interface PhotoInfo {
+  thumbnailUrl: string;
+  largeUrl: string | null;
+  photographer: string | null;
+  link: string | null;
+  source: "planespotters" | "wikipedia";
+  /** true when the photo is of this exact airframe */
+  exact: boolean;
+}
+
+export interface AircraftDetail {
+  aircraft: Aircraft;
+  ownerOperator: string | null;
+  country: string | null;
+  built: string | null;
+  route: RouteInfo | null;
+  photo: PhotoInfo | null;
+}
+
+export interface SourceStatus {
+  activeSource: string;
+  healthy: boolean;
+  lastError: string | null;
+  lastSuccessAt: number | null;
+  requestsLastMinute: number;
+}
+
+export type WatchKind = "hex" | "registration" | "type" | "callsign";
+
+export interface WatchEntry {
+  id: number;
+  kind: WatchKind;
+  value: string;
+  label: string | null;
+  enabled: boolean;
+}
+
+export interface AlertEvent {
+  hex: string;
+  reason: string; // human text
+  watchId: number | null;
+  emergency: boolean;
+  at: number;
+}
+
+export interface HomeLocation {
+  label: string;
+  lat: number;
+  lon: number;
+  /** [west, south, east, north] for area places (states, cities…). */
+  bbox: [number, number, number, number] | null;
+}
+
+export interface GeoResult {
+  label: string;
+  lat: number;
+  lon: number;
+  bbox: [number, number, number, number] | null;
+  kind: string;
+}
+
+export interface AppSettings {
+  pollIntervalMs: number;
+  sourceOrder: string[];
+  basemap: string;
+  home: HomeLocation | null;
+  contact: string;
+  tileCacheEnabled: boolean;
+  tileCacheMaxMb: number;
+  units: "imperial" | "metric";
+  notificationsEnabled: boolean;
+  showAllTrails: boolean;
+}

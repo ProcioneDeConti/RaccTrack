@@ -1,0 +1,78 @@
+:root {
+  --bg: #0e1116;
+  --bg-panel: #161b22;
+  --bg-elev: #1c232d;
+  --border: #2b333d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #4c9be8;
+  --caution-grey: #2b2b2b;
+  --caution-gold: #d4a017;
+
+  --alt-ground: #9aa0a6;
+  --alt-low: #7ad151;
+  --alt-mid: #f9c74f;
+  --alt-high: #f3722c;
+  --alt-vhigh: #b5179e;
+  --emergency: #ff3b30;
+
+  color-scheme: dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+input,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 6px;
+}

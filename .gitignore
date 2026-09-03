@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# local data / caches produced at runtime
+*.sqlite
+*.sqlite-*
+
+# generated mobile / Windows Store icon sets (not used by the desktop build)
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/Square*Logo.png
+src-tauri/icons/StoreLogo.png

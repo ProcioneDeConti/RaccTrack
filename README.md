@@ -1,0 +1,111 @@
+# RaccTrack (ADS-B)
+
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+
+A free, no-paywall ADS-B flight tracker for **North America**. Live aircraft map
+plus the maximum publicly available detail per aircraft, using the free community
+ADS-B aggregator networks — no subscription, no API key.
+
+Built with **Tauri 2 + Rust** (backend) and **Svelte + MapLibre GL** (frontend).
+
+## What it does
+
+- **Live map** of aircraft in view, refreshed every 1–10 s, hard-locked to a North
+  America bounding box. A yellow/black caution-tape frame marks that there is no
+  data beyond the map.
+- **Aircraft detail panel**: registration, type, operator, country, full broadcast
+  telemetry (altitude, speed, track, vertical rate, squawk + decoded meaning, nav
+  selected altitude, signal), route (origin → destination with airport names and a
+  great-circle line), and a photo from planespotters.net.
+- **Flight trails** for the selected aircraft, altitude-coloured, built live while
+  the app runs (not persisted).
+- **Filters**: altitude band, aircraft type, military only, on-ground, emergency
+  squawk only.
+- **Watchlist alerts**: desktop notification when a watched hex / registration /
+  type / callsign appears, or when any emergency squawk (7500 / 7600 / 7700)
+  shows up.
+- **Offline basemap cache**: map tiles are cached locally as you pan; "Download
+  current area" pre-fetches a region so it keeps rendering offline.
+
+## What it can't do (no free data source exists)
+
+- Scheduled times, gate/stand, delay or cancellation status.
+- Coverage over oceans and remote areas — the community feeds are volunteer
+  ground receivers only.
+
+See [`FEASIBILITY.md`](./FEASIBILITY.md) for the full research writeup.
+
+## Data sources
+
+| Purpose | Source | Notes |
+|---|---|---|
+| Live ADS-B | [adsb.lol](https://adsb.lol) (primary), [adsb.fi](https://adsb.fi) (fallback) | No key. ODbL. Viewport-scoped polling, ≤ ~1 req/s. |
+| Aircraft identity | Mictronics DB via [tar1090-db](https://github.com/wiedehopf/tar1090-db) | Bundled `src-tauri/assets/aircraft.csv.gz`. ODC-BY. |
+| Airports | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/airports.csv`. Public domain. |
+| Routes | [hexdb.io](https://hexdb.io) | Cached in SQLite. |
+| Photos | [planespotters.net](https://www.planespotters.net) | Cached 30 days. Attribution shown. |
+| Basemap | [OpenFreeMap](https://openfreemap.org) "dark" | No key. © OpenStreetMap. |
+
+## Development
+
+Prerequisites: Node 20+, Rust (stable, MSVC on Windows), the Tauri v2 system deps,
+WebView2 (bundled with Windows 11).
+
+```bash
+npm install
+npm run tauri dev      # run the app
+npm run tauri build    # produce a Windows installer (NSIS)
+```
+
+Checks:
+
+```bash
+npm run check                       # svelte-check (frontend types)
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+To refresh the bundled aircraft database:
+
+```bash
+curl -L -o src-tauri/assets/aircraft.csv.gz \
+  https://github.com/wiedehopf/tar1090-db/raw/refs/heads/csv/aircraft.csv.gz
+curl -L -o src-tauri/assets/airports.csv \
+  https://davidmegginson.github.io/ourairports-data/airports.csv
+```
+
+## Layout
+
+```
+src/                     Svelte frontend
+  lib/map/               MapLibre view, NA region, coverage boundary, icons, tile proxy
+  lib/panel/             aircraft detail panel (photo hero header)
+  lib/filters/           filter bar + predicate
+  lib/watchlist/         watchlist manager + alert toast/log
+  lib/settings/          settings, home-location search, tile cache controls
+src-tauri/src/
+  ingest/                AircraftSource trait + adsb.lol / adsb.fi HTTP sources
+  state.rs               live aircraft map, diffing, trail buffers
+  enrich/                identity DB, airports, routes, photos, country
+  geocode.rs             home-location search (Photon + coordinate parsing)
+  alerts.rs              watchlist storage + alert evaluation
+  tiles.rs               SQLite tile cache + custom URI scheme + area download
+  poller.rs              background polling loop
+  commands.rs            Tauri command surface
+```
+
+## Etiquette
+
+The community APIs are run by volunteers. This app polls only the current
+viewport, rate-limits itself, caches aggressively, and sends a descriptive
+User-Agent. Attribution for adsb.lol / adsb.fi (ODbL), CARTO / OpenFreeMap /
+OpenStreetMap, and photo credits are shown in-app. Intended for personal,
+non-commercial use.
+
+`planespotters.net` requires a contact URL or email in the User-Agent to serve
+photos — set one in **Settings → Aircraft photos**. Left blank, the app shows
+representative model photos from Wikipedia instead.
+
+## License
+
+[Apache License 2.0](./LICENSE). Third-party data and service attributions are in
+[`NOTICE`](./NOTICE).

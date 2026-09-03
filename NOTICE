@@ -1,0 +1,34 @@
+RaccTrack (ADS-B)
+Copyright 2026 RaccTrack contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+---
+
+The application relies on the following third-party data and services, each
+under its own terms. Bundled data files are redistributed here under the
+licenses noted; live services are queried at runtime and are not redistributed.
+
+- Aircraft ADS-B positions: adsb.lol and adsb.fi community feeder networks.
+  Data licensed under the Open Database License (ODbL).
+  https://adsb.lol/  ·  https://adsb.fi/
+
+- Aircraft registration database (src-tauri/assets/aircraft.csv.gz): the
+  Mictronics database, distributed via wiedehopf/tar1090-db.
+  Open Data Commons Attribution License (ODC-BY).
+  https://www.mictronics.de/aircraft-database/
+  https://github.com/wiedehopf/tar1090-db
+
+- Airport data (src-tauri/assets/airports.csv): OurAirports. Public domain.
+  https://ourairports.com/data/
+
+- Route lookups: hexdb.io. https://hexdb.io/
+
+- Aircraft photography: planespotters.net API (photographer-attributed) and
+  Wikipedia / Wikimedia Commons page images (representative model photos).
+
+- Basemap: CARTO and OpenFreeMap vector styles, data (c) OpenStreetMap
+  contributors. https://carto.com/attributions  ·  https://openfreemap.org/
+
+- Geocoding (home location search): Photon by Komoot, data (c) OpenStreetMap
+  contributors. https://photon.komoot.io/

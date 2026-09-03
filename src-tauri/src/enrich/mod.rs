@@ -1,0 +1,148 @@
+//! Aircraft enrichment: bundled identity DB, route lookup, photos, country.
+
+pub mod aircraft_db;
+pub mod airports;
+pub mod country;
+pub mod photos;
+pub mod routes;
+
+use std::sync::Arc;
+
+use arc_swap::ArcSwap;
+use serde::Serialize;
+
+use crate::ingest::model::Aircraft;
+use aircraft_db::AircraftDb;
+use airports::Airports;
+use photos::{Photo, PhotoLookup};
+use routes::RouteLookup;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteInfo {
+    pub callsign: String,
+    pub origin_icao: Option<String>,
+    pub origin_name: Option<String>,
+    pub destination_icao: Option<String>,
+    pub destination_name: Option<String>,
+    pub origin_lat: Option<f64>,
+    pub origin_lon: Option<f64>,
+    pub destination_lat: Option<f64>,
+    pub destination_lon: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftDetail {
+    pub aircraft: Aircraft,
+    pub owner_operator: Option<String>,
+    pub country: Option<String>,
+    pub built: Option<String>,
+    pub route: Option<RouteInfo>,
+    pub photo: Option<Photo>,
+}
+
+pub struct Enricher {
+    db: Arc<ArcSwap<AircraftDb>>,
+    airports: Arc<ArcSwap<Airports>>,
+    routes: RouteLookup,
+    photos: PhotoLookup,
+}
+
+impl Enricher {
+    pub fn new(
+        db: Arc<ArcSwap<AircraftDb>>,
+        airports: Arc<ArcSwap<Airports>>,
+        routes: RouteLookup,
+        photos: PhotoLookup,
+    ) -> Self {
+        Self {
+            db,
+            airports,
+            routes,
+            photos,
+        }
+    }
+
+    /// Fill in fields the ADS-B message doesn't carry (owner, model) from the
+    /// bundled database.
+    pub fn fill_identity(&self, ac: &mut Aircraft) -> Option<String> {
+        let db = self.db.load();
+        let meta = db.get(&ac.hex)?;
+        if ac.registration.is_none() {
+            ac.registration = meta.registration.clone();
+        }
+        if ac.type_code.is_none() {
+            ac.type_code = meta.type_code.clone();
+        }
+        if ac.description.is_none() {
+            ac.description = meta.description.clone();
+        }
+        if meta.military {
+            ac.military = true;
+        }
+        meta.owner.clone()
+    }
+
+    pub async fn detail(&self, mut ac: Aircraft, contact: &str) -> AircraftDetail {
+        let owner = self.fill_identity(&mut ac);
+        let built = self.db.load().get(&ac.hex).and_then(|m| m.year.clone());
+        let country = country::country_for_hex(&ac.hex).map(|s| s.to_string());
+
+        let route = match ac.flight.clone() {
+            Some(cs) if !cs.is_empty() => {
+                let r = self.routes.get(&cs).await.unwrap_or_default();
+                if r.is_empty() {
+                    None
+                } else {
+                    Some(self.resolve_route(&cs, r))
+                }
+            }
+            _ => None,
+        };
+
+        let photo = self
+            .photos
+            .get(
+                &ac.hex,
+                ac.registration.as_deref(),
+                ac.description.as_deref(),
+                contact,
+            )
+            .await
+            .unwrap_or(None);
+
+        AircraftDetail {
+            aircraft: ac,
+            owner_operator: owner,
+            country,
+            built,
+            route,
+            photo,
+        }
+    }
+
+    fn resolve_route(&self, callsign: &str, r: routes::Route) -> RouteInfo {
+        let airports = self.airports.load();
+        let orig = r.origin.as_deref().and_then(|c| airports.get(c)).cloned();
+        let dest = r.dest.as_deref().and_then(|c| airports.get(c)).cloned();
+        RouteInfo {
+            callsign: callsign.to_string(),
+            origin_icao: r.origin.clone(),
+            origin_name: orig.as_ref().map(pretty),
+            destination_icao: r.dest.clone(),
+            destination_name: dest.as_ref().map(pretty),
+            origin_lat: orig.as_ref().map(|a| a.lat),
+            origin_lon: orig.as_ref().map(|a| a.lon),
+            destination_lat: dest.as_ref().map(|a| a.lat),
+            destination_lon: dest.as_ref().map(|a| a.lon),
+        }
+    }
+}
+
+fn pretty(a: &airports::Airport) -> String {
+    match &a.municipality {
+        Some(city) if !a.name.contains(city.as_str()) => format!("{} ({})", a.name, city),
+        _ => a.name.clone(),
+    }
+}
