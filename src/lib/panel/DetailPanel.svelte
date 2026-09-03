@@ -18,7 +18,13 @@
     age,
     squawkMeaning,
   } from "../format";
-  import { distanceNm, fmtDistanceNm, fmtDuration, gcPath } from "../geo";
+  import {
+    distanceNm,
+    fmtDistanceNm,
+    fmtDuration,
+    gcPath,
+    projectOntoTrack,
+  } from "../geo";
 
   let detail: AircraftDetail | null = null;
   let loading = false;
@@ -88,13 +94,6 @@
     const total = distanceNm(r.originLat, r.originLon, r.destinationLat, r.destinationLon);
     if (total < 1) return null;
 
-    let frac = 0;
-    let toGo = total;
-    if (l?.lat != null && l?.lon != null) {
-      toGo = distanceNm(l.lat, l.lon, r.destinationLat, r.destinationLon);
-      frac = Math.max(0, Math.min(1, (total - toGo) / total));
-    }
-
     const path = gcPath(
       r.originLat,
       r.originLon,
@@ -102,23 +101,54 @@
       r.destinationLon,
       96,
     );
-    const k = Math.round(frac * (path.length - 1));
-    const line = {
-      flown: path.slice(0, k + 1),
-      remain: path.slice(k),
+
+    const full: [number, number][] = path;
+    const base = {
+      total,
+      known: false,
+      stale: false,
+      flown: 0,
+      toGo: total,
+      pct: 0,
+      etaHrs: null as number | null,
+      line: { flown: [] as [number, number][], remain: full },
+      destIcao: r.destinationIcao,
     };
 
-    const gs = l?.groundSpeed ?? null;
-    const etaHrs = gs && gs > 40 ? toGo / gs : null;
+    if (l?.lat == null || l?.lon == null) return base; // no live position
+
+    const { along, cross } = projectOntoTrack(
+      r.originLat,
+      r.originLon,
+      r.destinationLat,
+      r.destinationLon,
+      l.lat,
+      l.lon,
+    );
+
+    // hexdb route data is often stale (the flight number now flies a different
+    // pair). If the aircraft isn't anywhere near this path, don't pretend to
+    // know progress — show the route but flag it.
+    const offRoute =
+      cross > Math.max(120, total * 0.35) ||
+      along < -Math.max(60, total * 0.1) ||
+      along > total + Math.max(60, total * 0.1);
+    if (offRoute) return { ...base, stale: true };
+
+    const flown = Math.max(0, Math.min(total, along));
+    const toGo = total - flown;
+    const frac = flown / total;
+    const k = Math.round(frac * (path.length - 1));
+    const gs = l.groundSpeed ?? null;
 
     return {
-      total,
-      flown: total - toGo,
+      ...base,
+      known: true,
+      flown,
       toGo,
       pct: Math.round(frac * 100),
-      etaHrs,
-      line,
-      destIcao: r.destinationIcao,
+      etaHrs: gs && gs > 40 ? toGo / gs : null,
+      line: { flown: path.slice(0, k + 1), remain: path.slice(k) },
     };
   }
 
@@ -240,7 +270,7 @@
             <span class="muted">{detail.route.destinationName ?? ""}</span>
           </div>
         </div>
-        {#if prog}
+        {#if prog?.known}
           <div class="bar" title="Great-circle position — no schedule data">
             <div class="bar-fill" style="width:{prog.pct}%"></div>
           </div>
@@ -255,6 +285,13 @@
               {fmtDistanceNm(prog.total)} total
             {/if}
           </p>
+        {:else if prog?.stale}
+          <p class="eta muted">
+            {fmtDistanceNm(prog.total)} total · aircraft isn't on this path —
+            route data may be out of date.
+          </p>
+        {:else if prog}
+          <p class="eta muted">{fmtDistanceNm(prog.total)} total</p>
         {/if}
       {:else}
         <p class="muted">Unknown</p>

@@ -45,6 +45,34 @@ export function fmtDistanceNm(nm: number): string {
   return nm < 10 ? `${nm.toFixed(1)} nm` : `${Math.round(nm)} nm`;
 }
 
+/**
+ * Project point P onto the great circle from A to B.
+ *  - `along`: signed distance (nm) from A to P's foot on the A→B track.
+ *    Negative when P is "behind" A; can exceed |A→B| when P is past B.
+ *  - `cross`: absolute perpendicular offset (nm) of P from the track.
+ */
+export function projectOntoTrack(
+  latA: number,
+  lonA: number,
+  latB: number,
+  lonB: number,
+  latP: number,
+  lonP: number,
+): { along: number; cross: number } {
+  const d13 = distanceNm(latA, lonA, latP, lonP) / R_NM; // angular
+  if (d13 === 0) return { along: 0, cross: 0 };
+  const t13 = bearing(latA, lonA, latP, lonP) * D2R;
+  const t12 = bearing(latA, lonA, latB, lonB) * D2R;
+  const dxt = Math.asin(
+    Math.max(-1, Math.min(1, Math.sin(d13) * Math.sin(t13 - t12))),
+  );
+  const dat = Math.acos(
+    Math.max(-1, Math.min(1, Math.cos(d13) / Math.cos(dxt))),
+  );
+  const sign = Math.cos(t13 - t12) < 0 ? -1 : 1;
+  return { along: sign * dat * R_NM, cross: Math.abs(dxt) * R_NM };
+}
+
 /** Human duration from decimal hours, e.g. 1.2 -> "1h 12m". */
 export function fmtDuration(hours: number): string {
   if (!isFinite(hours) || hours < 0) return "—";
