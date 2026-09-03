@@ -28,7 +28,8 @@ use crate::app::AppState;
 use crate::config::AppSettings;
 use crate::db::Db;
 use crate::enrich::{
-    aircraft_db::AircraftDb, airports::Airports, photos::PhotoLookup, routes::RouteLookup, Enricher,
+    actypes::AcTypes, aircraft_db::AircraftDb, airlines::Airlines, airports::Airports,
+    photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
 use crate::airspace::Airspace;
 use crate::emergency_watch::EmergencyWatch;
@@ -111,11 +112,21 @@ pub fn run() {
             // --- enrichment (bundled DBs load in the background) ---
             let aircraft_db = Arc::new(ArcSwap::from_pointee(AircraftDb::empty()));
             let airports = Arc::new(ArcSwap::from_pointee(Airports::empty()));
-            spawn_reference_loaders(handle.clone(), aircraft_db.clone(), airports.clone());
+            let airlines = Arc::new(ArcSwap::from_pointee(Airlines::empty()));
+            let actypes = Arc::new(ArcSwap::from_pointee(AcTypes::empty()));
+            spawn_reference_loaders(
+                handle.clone(),
+                aircraft_db.clone(),
+                airports.clone(),
+                airlines.clone(),
+                actypes.clone(),
+            );
 
             let enricher = Arc::new(Enricher::new(
                 aircraft_db.clone(),
                 airports.clone(),
+                airlines.clone(),
+                actypes.clone(),
                 RouteLookup::new(db.clone(), http.clone()),
                 PhotoLookup::new(db.clone(), http.clone()),
             ));
@@ -209,6 +220,8 @@ fn spawn_reference_loaders(
     handle: tauri::AppHandle,
     aircraft_db: Arc<ArcSwap<AircraftDb>>,
     airports: Arc<ArcSwap<Airports>>,
+    airlines: Arc<ArcSwap<Airlines>>,
+    actypes: Arc<ArcSwap<AcTypes>>,
 ) {
     tauri::async_runtime::spawn_blocking(move || {
         let resolve = |rel: &str| -> Option<std::path::PathBuf> {
@@ -252,6 +265,28 @@ fn spawn_reference_loaders(
                 }
             }
             _ => tracing::warn!("airports.csv resource not found"),
+        }
+
+        match resolve("assets/airlines.dat").and_then(|p| std::fs::read_to_string(&p).ok()) {
+            Some(text) => match Airlines::from_dat(&text) {
+                Ok(a) => {
+                    tracing::info!("airlines loaded: {} entries", a.len());
+                    airlines.store(Arc::new(a));
+                }
+                Err(e) => tracing::warn!("airlines load failed: {e}"),
+            },
+            None => tracing::warn!("airlines.dat resource not found"),
+        }
+
+        match resolve("assets/actypes.json").and_then(|p| std::fs::read(&p).ok()) {
+            Some(bytes) => match AcTypes::from_json(&bytes) {
+                Ok(t) => {
+                    tracing::info!("aircraft types loaded: {} entries", t.len());
+                    actypes.store(Arc::new(t));
+                }
+                Err(e) => tracing::warn!("actypes load failed: {e}"),
+            },
+            None => tracing::warn!("actypes.json resource not found"),
         }
     });
 }

@@ -15,6 +15,7 @@ use crate::util::now_ms;
 
 const TTL_MS: i64 = 30 * 24 * 3600 * 1000;
 const NEGATIVE_TTL_MS: i64 = 3 * 24 * 3600 * 1000;
+const MAX_PHOTOS: usize = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,18 +46,18 @@ impl PhotoLookup {
         registration: Option<&str>,
         model: Option<&str>,
         contact: &str,
-    ) -> Result<Option<Photo>> {
+    ) -> Result<Vec<Photo>> {
         let hex = hex.to_lowercase();
 
         let have_contact = !contact.trim().is_empty();
-        if let Some((photo, fetched_at)) = self.cached(&hex)? {
-            let ttl = if photo.is_some() { TTL_MS } else { NEGATIVE_TTL_MS };
+        if let Some((photos, fetched_at)) = self.cached(&hex)? {
+            let ttl = if photos.is_empty() { NEGATIVE_TTL_MS } else { TTL_MS };
             // Don't serve a stale non-exact (model) photo if we now have a
             // planespotters contact and could fetch the real airframe.
             let stale_model = have_contact
-                && photo.as_ref().map(|p| !p.exact).unwrap_or(false);
+                && photos.first().map(|p| !p.exact).unwrap_or(false);
             if now_ms() - fetched_at < ttl && !stale_model {
-                return Ok(photo);
+                return Ok(photos);
             }
         }
 
@@ -64,7 +65,7 @@ impl PhotoLookup {
             Ok(p) => p,
             Err(e) => {
                 tracing::debug!("image lookup for {hex} failed: {e}");
-                return Ok(self.cached(&hex)?.and_then(|(p, _)| p));
+                return Ok(self.cached(&hex)?.map(|(p, _)| p).unwrap_or_default());
             }
         };
         self.store(&hex, &found)?;
@@ -77,7 +78,7 @@ impl PhotoLookup {
         registration: Option<&str>,
         model: Option<&str>,
         contact: &str,
-    ) -> Result<Option<Photo>> {
+    ) -> Result<Vec<Photo>> {
         // planespotters.net requires a contact URL/email in the User-Agent.
         let contact = contact.trim();
         if !contact.is_empty() {
@@ -85,24 +86,27 @@ impl PhotoLookup {
                 "RaccTrack-ADSB/{} (+{contact})",
                 env!("CARGO_PKG_VERSION")
             );
-            if let Some(p) = self.planespotters(&format!("hex/{hex}"), &ua).await? {
-                return Ok(Some(p));
+            let by_hex = self.planespotters(&format!("hex/{hex}"), &ua).await?;
+            if !by_hex.is_empty() {
+                return Ok(by_hex);
             }
             if let Some(reg) = registration.map(|r| r.trim()).filter(|r| !r.is_empty()) {
-                if let Some(p) = self.planespotters(&format!("reg/{reg}"), &ua).await? {
-                    return Ok(Some(p));
+                let by_reg = self.planespotters(&format!("reg/{reg}"), &ua).await?;
+                if !by_reg.is_empty() {
+                    return Ok(by_reg);
                 }
             }
         }
         if let Some(model) = model.map(|m| m.trim()).filter(|m| !m.is_empty()) {
             if let Some(p) = self.wikipedia(model).await? {
-                return Ok(Some(p));
+                return Ok(vec![p]);
             }
         }
-        Ok(None)
+        Ok(Vec::new())
     }
 
-    async fn planespotters(&self, path: &str, ua: &str) -> Result<Option<Photo>> {
+    /// Up to `MAX_PHOTOS` photos of the exact airframe.
+    async fn planespotters(&self, path: &str, ua: &str) -> Result<Vec<Photo>> {
         let url = format!("https://api.planespotters.net/pub/photos/{path}");
         let resp = self
             .client
@@ -112,27 +116,29 @@ impl PhotoLookup {
             .send()
             .await?;
         if !resp.status().is_success() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let body: PsResponse = resp.json().await?;
-        let Some(p) = body.photos.into_iter().next() else {
-            return Ok(None);
-        };
-        let thumb = p
-            .thumbnail
-            .or_else(|| p.thumbnail_large.clone())
-            .map(|s| s.src);
-        let Some(thumbnail_url) = thumb else {
-            return Ok(None);
-        };
-        Ok(Some(Photo {
-            thumbnail_url,
-            large_url: p.thumbnail_large.map(|s| s.src),
-            photographer: p.photographer,
-            link: p.link,
-            source: "planespotters".into(),
-            exact: true,
-        }))
+        let photos = body
+            .photos
+            .into_iter()
+            .filter_map(|p| {
+                let thumb = p
+                    .thumbnail
+                    .or_else(|| p.thumbnail_large.clone())
+                    .map(|s| s.src)?;
+                Some(Photo {
+                    thumbnail_url: thumb,
+                    large_url: p.thumbnail_large.map(|s| s.src),
+                    photographer: p.photographer,
+                    link: p.link,
+                    source: "planespotters".into(),
+                    exact: true,
+                })
+            })
+            .take(MAX_PHOTOS)
+            .collect();
+        Ok(photos)
     }
 
     async fn wikipedia(&self, model: &str) -> Result<Option<Photo>> {
@@ -168,7 +174,7 @@ impl PhotoLookup {
         }))
     }
 
-    fn cached(&self, hex: &str) -> Result<Option<(Option<Photo>, i64)>> {
+    fn cached(&self, hex: &str) -> Result<Option<(Vec<Photo>, i64)>> {
         self.db.with_conn(|c| {
             let mut stmt =
                 c.prepare("SELECT json, fetched_at FROM image_cache WHERE hex = ?1")?;
@@ -176,16 +182,22 @@ impl PhotoLookup {
             if let Some(r) = rows.next()? {
                 let json: String = r.get(0)?;
                 let fetched_at: i64 = r.get(1)?;
-                let photo = serde_json::from_str::<Option<Photo>>(&json).unwrap_or(None);
-                Ok(Some((photo, fetched_at)))
+                // Tolerate the pre-gallery cache shape (a bare object / null).
+                let photos = serde_json::from_str::<Vec<Photo>>(&json)
+                    .or_else(|_| {
+                        serde_json::from_str::<Option<Photo>>(&json)
+                            .map(|o| o.into_iter().collect())
+                    })
+                    .unwrap_or_default();
+                Ok(Some((photos, fetched_at)))
             } else {
                 Ok(None)
             }
         })
     }
 
-    fn store(&self, hex: &str, photo: &Option<Photo>) -> Result<()> {
-        let json = serde_json::to_string(photo)?;
+    fn store(&self, hex: &str, photos: &[Photo]) -> Result<()> {
+        let json = serde_json::to_string(photos)?;
         self.db.with_conn(|c| {
             c.execute(
                 "INSERT INTO image_cache(hex, json, fetched_at) VALUES(?1, ?2, ?3)

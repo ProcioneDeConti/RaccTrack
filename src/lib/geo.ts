@@ -44,3 +44,61 @@ export function compass(deg: number): string {
 export function fmtDistanceNm(nm: number): string {
   return nm < 10 ? `${nm.toFixed(1)} nm` : `${Math.round(nm)} nm`;
 }
+
+/** Human duration from decimal hours, e.g. 1.2 -> "1h 12m". */
+export function fmtDuration(hours: number): string {
+  if (!isFinite(hours) || hours < 0) return "—";
+  const total = Math.round(hours * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return h > 0 ? `${h}h ${m.toString().padStart(2, "0")}m` : `${m}m`;
+}
+
+/**
+ * Point at fraction `f` (0–1) along the great circle from 1 to 2.
+ * Returns `[lon, lat]` (GeoJSON order).
+ */
+export function gcInterpolate(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+  f: number,
+): [number, number] {
+  const φ1 = lat1 * D2R,
+    λ1 = lon1 * D2R,
+    φ2 = lat2 * D2R,
+    λ2 = lon2 * D2R;
+  const dφ = φ2 - φ1,
+    dλ = λ2 - λ1;
+  const a =
+    Math.sin(dφ / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
+  const δ = 2 * Math.asin(Math.min(1, Math.sqrt(a)));
+  if (δ === 0) return [lon1, lat1];
+  const A = Math.sin((1 - f) * δ) / Math.sin(δ);
+  const B = Math.sin(f * δ) / Math.sin(δ);
+  const x =
+    A * Math.cos(φ1) * Math.cos(λ1) + B * Math.cos(φ2) * Math.cos(λ2);
+  const y =
+    A * Math.cos(φ1) * Math.sin(λ1) + B * Math.cos(φ2) * Math.sin(λ2);
+  const z = A * Math.sin(φ1) + B * Math.sin(φ2);
+  const φ = Math.atan2(z, Math.sqrt(x * x + y * y));
+  const λ = Math.atan2(y, x);
+  return [λ / D2R, φ / D2R];
+}
+
+/** A great-circle polyline `[lon, lat][]` from 1 to 2 with `steps` segments. */
+export function gcPath(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+  steps = 64,
+): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    out.push(gcInterpolate(lat1, lon1, lat2, lon2, i / steps));
+  }
+  return out;
+}

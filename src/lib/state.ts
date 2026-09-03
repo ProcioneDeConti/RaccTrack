@@ -41,6 +41,16 @@ import type { Geofence } from "./api/types";
 /** geofences, kept in sync so the map can draw them */
 export const geofences = writable<Geofence[]>([]);
 
+/**
+ * Great-circle route of the selected aircraft, split into the leg already
+ * flown and the leg remaining, for the map's two-tone route line.
+ * `[lon, lat][]` segments; null when there's nothing to draw.
+ */
+export const routeLine = writable<{
+  flown: [number, number][];
+  remain: [number, number][];
+} | null>(null);
+
 /** current map viewport bounds (updated by MapView) */
 export const mapBounds = writable<{
   west: number;

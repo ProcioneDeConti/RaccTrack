@@ -19,8 +19,16 @@ licenses noted; live services are queried at runtime and are not redistributed.
   https://www.mictronics.de/aircraft-database/
   https://github.com/wiedehopf/tar1090-db
 
-- Airport data (src-tauri/assets/airports.csv): OurAirports. Public domain.
+- Airport data (src-tauri/assets/airports.csv, runways.csv,
+  airport-frequencies.csv): OurAirports. Public domain.
   https://ourairports.com/data/
+
+- Airline callsign / telephony data (src-tauri/assets/airlines.dat): OpenFlights.
+  Open Database License (ODbL). https://openflights.org/data.html
+
+- Aircraft type designators — engine and wake-turbulence data
+  (src-tauri/assets/actypes.json): Mictronics types.json, distributed via
+  Mictronics/readsb. https://www.mictronics.de/
 
 - Route lookups: hexdb.io. https://hexdb.io/
 

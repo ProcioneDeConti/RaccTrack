@@ -37,6 +37,7 @@
     flyTo,
     mapBounds,
     geofences,
+    routeLine,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
   import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
@@ -65,6 +66,7 @@
   let unsubFly: (() => void) | undefined;
   let unsubAircraft: (() => void) | undefined;
   let unsubHover: (() => void) | undefined;
+  let unsubRoute: (() => void) | undefined;
   let curLayers: MapLayers = {
     airports: false,
     weather: false,
@@ -220,6 +222,9 @@
     if (!map.getSource("hover")) {
       map.addSource("hover", { type: "geojson", data: EMPTY_FC as any });
     }
+    if (!map.getSource("route")) {
+      map.addSource("route", { type: "geojson", data: EMPTY_FC as any });
+    }
 
     try {
       addCoverageBoundary(map);
@@ -245,6 +250,36 @@
       8,
       ["*", 1.15, ["get", "sizeMul"]],
     ];
+
+    if (!map.getLayer("route-remain")) {
+      map.addLayer({
+        id: "route-remain",
+        type: "line",
+        source: "route",
+        filter: ["==", ["get", "leg"], "remain"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-width": 2,
+          "line-color": "#7f8b99",
+          "line-dasharray": [2, 2],
+          "line-opacity": 0.7,
+        },
+      });
+    }
+    if (!map.getLayer("route-flown")) {
+      map.addLayer({
+        id: "route-flown",
+        type: "line",
+        source: "route",
+        filter: ["==", ["get", "leg"], "flown"],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-width": 2.5,
+          "line-color": "#4c9be8",
+          "line-opacity": 0.9,
+        },
+      });
+    }
 
     if (!map.getLayer("trail-line")) {
       map.addLayer({
@@ -382,7 +417,33 @@
       );
     }
 
-    if (freshInstall) void refreshTrail();
+    if (freshInstall) {
+      void refreshTrail();
+      renderRoute(get(routeLine));
+    }
+  }
+
+  function renderRoute(
+    r: { flown: [number, number][]; remain: [number, number][] } | null,
+  ) {
+    const src = map?.getSource("route") as GeoJSONSource | undefined;
+    if (!src) return;
+    const features: any[] = [];
+    if (r && r.flown.length > 1) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: r.flown },
+        properties: { leg: "flown" },
+      });
+    }
+    if (r && r.remain.length > 1) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: r.remain },
+        properties: { leg: "remain" },
+      });
+    }
+    src.setData({ type: "FeatureCollection", features } as any);
   }
 
   // Event handlers that should be bound exactly once for the map's lifetime.
@@ -499,6 +560,7 @@
       updateHoverRing();
     });
     unsubHover = hoveredHex.subscribe(() => updateHoverRing());
+    unsubRoute = routeLine.subscribe((r) => renderRoute(r));
 
     unsubFollow = followHex.subscribe((hex) => {
       if (hex) {
@@ -645,6 +707,7 @@
     unsubFly?.();
     unsubAircraft?.();
     unsubHover?.();
+    unsubRoute?.();
     homeMarker?.remove();
     map?.remove();
   });

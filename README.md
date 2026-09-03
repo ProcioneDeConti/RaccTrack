@@ -41,9 +41,11 @@ See [`FEASIBILITY.md`](./FEASIBILITY.md) for the full research writeup.
 |---|---|---|
 | Live ADS-B | [adsb.lol](https://adsb.lol) (primary), [adsb.fi](https://adsb.fi) (fallback) | No key. ODbL. Viewport-scoped polling, ≤ ~1 req/s. |
 | Aircraft identity | Mictronics DB via [tar1090-db](https://github.com/wiedehopf/tar1090-db) | Bundled `src-tauri/assets/aircraft.csv.gz`. ODC-BY. |
-| Airports | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/airports.csv`. Public domain. |
+| Airports | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/airports.csv` (+ `runways.csv`, `airport-frequencies.csv`). Public domain. |
+| Airline callsigns | [OpenFlights](https://openflights.org/data.html) | Bundled `src-tauri/assets/airlines.dat`. ODbL. |
+| Aircraft types | [Mictronics](https://www.mictronics.de/) `types.json` | Bundled `src-tauri/assets/actypes.json`. Engine/wake by ICAO type. |
 | Routes | [hexdb.io](https://hexdb.io) | Cached in SQLite. |
-| Photos | [planespotters.net](https://www.planespotters.net) | Cached 30 days. Attribution shown. |
+| Photos | [planespotters.net](https://www.planespotters.net) | Cached 30 days; up to 6 per airframe. Attribution shown. |
 | Basemap | [OpenFreeMap](https://openfreemap.org) "dark" | No key. © OpenStreetMap. |
 
 ## Development
@@ -71,6 +73,10 @@ curl -L -o src-tauri/assets/aircraft.csv.gz \
   https://github.com/wiedehopf/tar1090-db/raw/refs/heads/csv/aircraft.csv.gz
 curl -L -o src-tauri/assets/airports.csv \
   https://davidmegginson.github.io/ourairports-data/airports.csv
+curl -L -o src-tauri/assets/airlines.dat \
+  https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat
+curl -L -o src-tauri/assets/actypes.json \
+  https://raw.githubusercontent.com/Mictronics/readsb/master/webapp/src/db/types.json
 ```
 
 ## Layout

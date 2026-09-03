@@ -6,6 +6,7 @@
     followHex,
     pinned,
     togglePin,
+    routeLine,
   } from "../state";
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
@@ -17,25 +18,35 @@
     age,
     squawkMeaning,
   } from "../format";
+  import { distanceNm, fmtDistanceNm, fmtDuration, gcPath } from "../geo";
 
   let detail: AircraftDetail | null = null;
   let loading = false;
   let error: string | null = null;
   let currentHex: string | null = null;
+  let photoIdx = 0;
 
   const unsub = selectedHex.subscribe((hex) => {
     currentHex = hex;
     detail = null;
     error = null;
+    photoIdx = 0;
+    routeLine.set(null);
     if (hex) void load(hex);
   });
-  onDestroy(unsub);
+  onDestroy(() => {
+    unsub();
+    routeLine.set(null);
+  });
 
   async function load(hex: string) {
     loading = true;
     try {
       const d = await getAircraftDetail(hex);
-      if (currentHex === hex) detail = d;
+      if (currentHex === hex) {
+        detail = d;
+        photoIdx = 0;
+      }
     } catch (e) {
       error = String(e);
     } finally {
@@ -47,6 +58,70 @@
   $: live = currentHex ? ($aircraft.get(currentHex) ?? detail?.aircraft ?? null) : null;
   $: sqMeaning = squawkMeaning(live?.squawk ?? null);
 
+  $: photos = detail?.photos ?? [];
+  $: photo = photos[Math.min(photoIdx, Math.max(0, photos.length - 1))] ?? null;
+
+  // --- type / age ---
+  $: td = detail?.typeDetails ?? null;
+  $: engineLine = td && td.engines && td.engType
+    ? `${td.engines} × ${td.engType.toLowerCase()}`
+    : null;
+  $: builtYear = detail?.built ? parseInt(detail.built, 10) : NaN;
+  $: builtLine = Number.isFinite(builtYear)
+    ? `${builtYear} (${new Date().getFullYear() - builtYear} yr)`
+    : null;
+
+  // --- route progress ---
+  $: prog = computeProgress(detail, live);
+  $: routeLine.set(prog?.line ?? null);
+
+  function computeProgress(d: AircraftDetail | null, l: typeof live) {
+    const r = d?.route;
+    if (
+      !r ||
+      r.originLat == null ||
+      r.originLon == null ||
+      r.destinationLat == null ||
+      r.destinationLon == null
+    )
+      return null;
+    const total = distanceNm(r.originLat, r.originLon, r.destinationLat, r.destinationLon);
+    if (total < 1) return null;
+
+    let frac = 0;
+    let toGo = total;
+    if (l?.lat != null && l?.lon != null) {
+      toGo = distanceNm(l.lat, l.lon, r.destinationLat, r.destinationLon);
+      frac = Math.max(0, Math.min(1, (total - toGo) / total));
+    }
+
+    const path = gcPath(
+      r.originLat,
+      r.originLon,
+      r.destinationLat,
+      r.destinationLon,
+      96,
+    );
+    const k = Math.round(frac * (path.length - 1));
+    const line = {
+      flown: path.slice(0, k + 1),
+      remain: path.slice(k),
+    };
+
+    const gs = l?.groundSpeed ?? null;
+    const etaHrs = gs && gs > 40 ? toGo / gs : null;
+
+    return {
+      total,
+      flown: total - toGo,
+      toGo,
+      pct: Math.round(frac * 100),
+      etaHrs,
+      line,
+      destIcao: r.destinationIcao,
+    };
+  }
+
   function close() {
     selectedHex.set(null);
   }
@@ -55,18 +130,34 @@
     if (!live) return;
     await addWatch("hex", live.hex, live.flight ?? live.registration ?? live.hex);
   }
+
+  function prevPhoto() {
+    photoIdx = (photoIdx - 1 + photos.length) % photos.length;
+  }
+  function nextPhoto() {
+    photoIdx = (photoIdx + 1) % photos.length;
+  }
 </script>
 
 {#if currentHex}
   <aside class="panel">
-    <header class:has-photo={!!detail?.photo}>
-      {#if detail?.photo}
+    <header class:has-photo={!!photo}>
+      {#if photo}
         <img
           class="hero-img"
-          src={detail.photo.largeUrl ?? detail.photo.thumbnailUrl}
+          src={photo.largeUrl ?? photo.thumbnailUrl}
           alt={live?.registration ?? currentHex}
         />
         <div class="hero-scrim"></div>
+        {#if photos.length > 1}
+          <button class="nav prev" on:click={prevPhoto} title="Previous photo">‹</button>
+          <button class="nav next" on:click={nextPhoto} title="Next photo">›</button>
+          <div class="dots">
+            {#each photos as _, i}
+              <span class="dot" class:on={i === photoIdx}></span>
+            {/each}
+          </div>
+        {/if}
       {/if}
       <button class="close" on:click={close} title="Close">✕</button>
       <div class="title">
@@ -76,17 +167,17 @@
           <span class="tag emg">{live.emergency.toUpperCase()}</span>
         {/if}
       </div>
-      {#if detail?.photo}
+      {#if photo}
         <a
           class="credit"
-          href={detail.photo.link ?? undefined}
+          href={photo.link ?? undefined}
           target="_blank"
           rel="noreferrer"
         >
-          {#if detail.photo.source === "wikipedia"}
-            representative photo — {detail.photo.photographer ?? "model"} · Wikipedia
+          {#if photo.source === "wikipedia"}
+            representative photo — {photo.photographer ?? "model"} · Wikipedia
           {:else}
-            © {detail.photo.photographer ?? "unknown"} · planespotters.net
+            © {photo.photographer ?? "unknown"} · planespotters.net
           {/if}
         </a>
       {/if}
@@ -107,7 +198,29 @@
           {detail?.aircraft.typeCode ?? live?.typeCode ?? "—"}
           {#if detail?.aircraft.description}— {detail.aircraft.description}{/if}
         </dd>
-        <dt>Operator</dt><dd>{detail?.ownerOperator ?? "—"}</dd>
+        {#if engineLine}
+          <dt>Engines</dt><dd>{engineLine}</dd>
+        {/if}
+        {#if td?.wtc}
+          <dt>Wake category</dt><dd>{td.wtc}</dd>
+        {/if}
+        {#if builtLine}
+          <dt>Built</dt><dd>{builtLine}</dd>
+        {/if}
+        <dt>Operator</dt>
+        <dd>
+          {#if detail?.operator}
+            {detail.operator.name}
+            {#if detail.operator.telephony}
+              <span class="muted">· “{detail.operator.telephony}”</span>
+            {/if}
+          {:else}
+            {detail?.ownerOperator ?? "—"}
+          {/if}
+        </dd>
+        {#if detail?.operator && detail.ownerOperator && detail.ownerOperator !== detail.operator.name}
+          <dt>Registered to</dt><dd>{detail.ownerOperator}</dd>
+        {/if}
         <dt>Country</dt><dd>{detail?.country ?? "—"}</dd>
         <dt>ICAO hex</dt><dd class="mono">{currentHex}</dd>
       </dl>
@@ -127,6 +240,22 @@
             <span class="muted">{detail.route.destinationName ?? ""}</span>
           </div>
         </div>
+        {#if prog}
+          <div class="bar" title="Great-circle position — no schedule data">
+            <div class="bar-fill" style="width:{prog.pct}%"></div>
+          </div>
+          <div class="prog">
+            <span>{prog.pct}%</span>
+            <span>{fmtDistanceNm(prog.flown)} flown · {fmtDistanceNm(prog.toGo)} to go</span>
+          </div>
+          <p class="eta" title="Rough estimate from ground speed — no schedule data">
+            {#if prog.etaHrs != null}
+              ~{fmtDuration(prog.etaHrs)} to {prog.destIcao ?? "destination"} (est.)
+            {:else}
+              {fmtDistanceNm(prog.total)} total
+            {/if}
+          </p>
+        {/if}
       {:else}
         <p class="muted">Unknown</p>
       {/if}
@@ -224,6 +353,46 @@
       rgba(13, 17, 23, 0.82) 100%
     );
   }
+  .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: rgba(0, 0, 0, 0.4);
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    padding: 4px 9px;
+    border-radius: 4px;
+    z-index: 2;
+  }
+  .nav:hover {
+    background: rgba(0, 0, 0, 0.65);
+  }
+  .nav.prev {
+    left: 6px;
+  }
+  .nav.next {
+    right: 6px;
+  }
+  .dots {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 4px;
+    z-index: 2;
+  }
+  .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+  }
+  .dot.on {
+    background: #fff;
+  }
   .title {
     position: relative;
     display: flex;
@@ -275,6 +444,7 @@
     font-size: 14px;
     line-height: 1;
     color: var(--text);
+    z-index: 3;
   }
   header.has-photo .close {
     color: #fff;
@@ -326,6 +496,28 @@
   }
   .arrow {
     color: var(--accent);
+  }
+  .bar {
+    margin-top: 8px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: var(--accent);
+  }
+  .prog {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 3px;
+  }
+  .eta {
+    margin: 4px 0 0;
+    font-size: 12px;
   }
   .err {
     color: var(--emergency);

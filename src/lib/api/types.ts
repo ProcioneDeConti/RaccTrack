@@ -96,13 +96,30 @@ export interface PhotoInfo {
   exact: boolean;
 }
 
+export interface Operator {
+  name: string;
+  telephony: string | null;
+  kind: "airline" | "military" | "government";
+  country: string | null;
+}
+
+export interface AcType {
+  designator: string;
+  class: string | null; // "Landplane" | "Helicopter" | ...
+  engines: number | null;
+  engType: string | null; // "Jet" | "Turboprop" | "Piston" | ...
+  wtc: string | null; // "Light" | "Medium" | "Heavy" | "Super"
+}
+
 export interface AircraftDetail {
   aircraft: Aircraft;
   ownerOperator: string | null;
+  operator: Operator | null;
   country: string | null;
   built: string | null;
+  typeDetails: AcType | null;
   route: RouteInfo | null;
-  photo: PhotoInfo | null;
+  photos: PhotoInfo[];
 }
 
 export interface SourceStatus {
