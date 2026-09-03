@@ -464,8 +464,11 @@ function destination(
 function circle(lat: number, lon: number, radiusNm: number): [number, number][] {
   const steps = 128;
   const pts: [number, number][] = [];
+  // Counter-clockwise (bearing decreasing from north). GeoJSON wants exterior
+  // rings CCW; geojson-vt clips a wrong-wound ring inside-out at tile edges,
+  // which fills a whole boundary tile instead of the disc.
   for (let i = 0; i < steps; i++) {
-    pts.push(destination(lat, lon, radiusNm, (i * 360) / steps));
+    pts.push(destination(lat, lon, radiusNm, -(i * 360) / steps));
   }
   // Close the ring with a vertex identical to the first — MapLibre leaves a
   // notch at the seam when a polygon's first/last points only *nearly* match.
