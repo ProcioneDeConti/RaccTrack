@@ -9,12 +9,17 @@
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import AlertToast from "./lib/watchlist/AlertToast.svelte";
+  import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
+  import SearchBox from "./lib/search/SearchBox.svelte";
+  import PinnedBar from "./lib/panel/PinnedBar.svelte";
   import {
     applyDiff,
     resetAircraft,
     sourceStatus,
     home,
     goHomeSignal,
+    pinned,
+    visibleAircraft,
   } from "./lib/state";
   import {
     onDiff,
@@ -30,6 +35,7 @@
   import iconUrl from "./assets/icon.png";
 
   let panel: "none" | "watchlist" | "settings" = "none";
+  let showList = false;
   let notificationsEnabled = true;
   let mapView: MapView;
 
@@ -54,6 +60,7 @@
         const s = await getSettings();
         notificationsEnabled = s.notificationsEnabled;
         units.set(s.units);
+        pinned.set(s.pinned ?? []);
       } catch {
         /* backend still starting */
       }
@@ -89,12 +96,18 @@
 
   function toggle(p: "watchlist" | "settings") {
     panel = panel === p ? "none" : p;
+    if (panel !== "none") showList = false;
   }
+  $: if (showList) panel = "none";
 </script>
 
 <main>
   <div class="toolbar">
     <div class="brand"><img src={iconUrl} alt="" /> RaccTrack <span class="sub">(ADS-B)</span></div>
+    <SearchBox />
+    <button class:active={showList} on:click={() => (showList = !showList)}>
+      List{#if $visibleAircraft.length} ({$visibleAircraft.length}){/if}
+    </button>
     <button class:active={panel === "watchlist"} on:click={() => toggle("watchlist")}>
       Watchlist
     </button>
@@ -115,6 +128,9 @@
     <MapView bind:this={mapView} />
     <FilterBar />
     <LayersControl />
+    {#if showList}
+      <AircraftList onClose={() => (showList = false)} />
+    {/if}
     {#if panel === "watchlist"}
       <WatchlistPanel onClose={() => (panel = "none")} />
     {:else if panel === "settings"}
@@ -122,6 +138,7 @@
     {/if}
     <DetailPanel />
     <AirportPanel />
+    <PinnedBar />
     <AlertToast />
   </div>
   <StatusBar />

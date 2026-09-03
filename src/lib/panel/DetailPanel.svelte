@@ -1,6 +1,12 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { selectedHex, aircraft } from "../state";
+  import {
+    selectedHex,
+    aircraft,
+    followHex,
+    pinned,
+    togglePin,
+  } from "../state";
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
   import {
@@ -154,6 +160,21 @@
     </section>
 
     <footer>
+      <div class="btnrow">
+        <button
+          class:active={$followHex === currentHex}
+          on:click={() =>
+            followHex.set($followHex === currentHex ? null : currentHex)}
+        >
+          {$followHex === currentHex ? "⊙ Following" : "⊙ Follow"}
+        </button>
+        <button
+          class:active={currentHex ? $pinned.includes(currentHex) : false}
+          on:click={() => currentHex && togglePin(currentHex)}
+        >
+          {currentHex && $pinned.includes(currentHex) ? "📌 Pinned" : "📌 Pin"}
+        </button>
+      </div>
       <button on:click={watchThis}>+ Watch this aircraft</button>
     </footer>
   </aside>
@@ -316,8 +337,18 @@
   }
   footer {
     margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
   footer button {
     width: 100%;
+  }
+  .btnrow {
+    display: flex;
+    gap: 6px;
+  }
+  .btnrow button {
+    flex: 1;
   }
 </style>

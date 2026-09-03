@@ -27,6 +27,33 @@ export const layers = writable<MapLayers>({
 export const rangeRingsNm = writable<number[]>([25, 50, 100]);
 /** airport ident whose info panel is open */
 export const selectedAirport = writable<string | null>(null);
+/** hex the map is locked to and follows */
+export const followHex = writable<string | null>(null);
+/** hexes pinned to the bottom bar */
+export const pinned = writable<string[]>([]);
+/** bumped to ask MapView to fly to a lat/lon */
+export const flyTo = writable<{ lat: number; lon: number; zoom?: number } | null>(
+  null,
+);
+/** current map viewport bounds (updated by MapView) */
+export const mapBounds = writable<{
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+} | null>(null);
+
+import { updateSettings } from "./api/backend";
+
+export function togglePin(hex: string): void {
+  pinned.update((list) => {
+    const next = list.includes(hex)
+      ? list.filter((h) => h !== hex)
+      : [...list, hex].slice(-12);
+    void updateSettings({ pinned: next });
+    return next;
+  });
+}
 
 export function applyDiff(diff: AircraftDiff): void {
   aircraft.update((m) => {
@@ -111,3 +138,25 @@ export function selectedAircraft(): Aircraft | null {
   if (!hex) return null;
   return get(aircraft).get(hex) ?? null;
 }
+
+/** Aircraft with a position inside the current viewport, matching active filters. */
+export const visibleAircraft = derived(
+  [aircraft, mapBounds, filters],
+  ([$aircraft, $bounds, $filters]) => {
+    const out: Aircraft[] = [];
+    for (const a of $aircraft.values()) {
+      if (a.lat === null || a.lon === null) continue;
+      if (!matchesFilters(a, $filters)) continue;
+      if (
+        $bounds &&
+        (a.lon < $bounds.west ||
+          a.lon > $bounds.east ||
+          a.lat < $bounds.south ||
+          a.lat > $bounds.north)
+      )
+        continue;
+      out.push(a);
+    }
+    return out;
+  },
+);

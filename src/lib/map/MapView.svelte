@@ -23,6 +23,7 @@
   import { makeTransformRequest } from "./tileProxy";
   import { Overlays } from "./overlays";
   import {
+    aircraft,
     aircraftGeoJson,
     selectedHex,
     hoveredHex,
@@ -32,6 +33,9 @@
     layers,
     rangeRingsNm,
     selectedAirport,
+    followHex,
+    flyTo,
+    mapBounds,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
   import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
@@ -55,6 +59,10 @@
   let overlayTimer: number | undefined;
   let unsubLayers: (() => void) | undefined;
   let unsubRings: (() => void) | undefined;
+  let unsubFollow: (() => void) | undefined;
+  let unsubFly: (() => void) | undefined;
+  let unsubAircraft: (() => void) | undefined;
+  let unsubHover: (() => void) | undefined;
   let curLayers: MapLayers = {
     airports: false,
     weather: false,
@@ -73,8 +81,37 @@
       east: b.getEast(),
       north: b.getNorth(),
     };
+    mapBounds.set(bbox);
     const clipped = clipToRegion(bbox);
     if (clipped) void setViewport(clipped, map.getZoom());
+  }
+
+  function followAircraft() {
+    const hex = get(followHex);
+    if (!map || !hex) return;
+    const a = get(aircraft).get(hex);
+    if (!a || a.lat === null || a.lon === null) return;
+    const c = map.getCenter();
+    // Only recenter once the target drifts from centre, and gently.
+    if (Math.hypot(c.lng - a.lon, c.lat - a.lat) < 0.002) return;
+    map.easeTo({ center: [a.lon, a.lat], duration: 400 });
+  }
+
+  function updateHoverRing() {
+    const src = map?.getSource("hover") as GeoJSONSource | undefined;
+    if (!src) return;
+    const hex = get(hoveredHex);
+    const a = hex ? get(aircraft).get(hex) : null;
+    if (a && a.lat !== null && a.lon !== null) {
+      src.setData({
+        type: "FeatureCollection",
+        features: [
+          { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [a.lon, a.lat] } },
+        ],
+      } as any);
+    } else {
+      src.setData(EMPTY_FC as any);
+    }
   }
 
   function scheduleViewport() {
@@ -178,6 +215,9 @@
     if (!map.getSource("trail")) {
       map.addSource("trail", { type: "geojson", data: EMPTY_FC as any });
     }
+    if (!map.getSource("hover")) {
+      map.addSource("hover", { type: "geojson", data: EMPTY_FC as any });
+    }
 
     try {
       addCoverageBoundary(map);
@@ -238,6 +278,21 @@
           "circle-radius": 14,
           "circle-color": ["case", ["get", "emergency"], "#ff3b30", "#4c9be8"],
           "circle-opacity": 0.22,
+        },
+      });
+    }
+
+    if (!map.getLayer("hover-ring")) {
+      map.addLayer({
+        id: "hover-ring",
+        type: "circle",
+        source: "hover",
+        paint: {
+          "circle-radius": 12,
+          "circle-opacity": 0,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-stroke-opacity": 0.9,
         },
       });
     }
@@ -436,6 +491,28 @@
       const src = map?.getSource("aircraft") as GeoJSONSource | undefined;
       src?.setData(fc as any);
     });
+    unsubAircraft = aircraft.subscribe(() => {
+      followAircraft();
+      updateHoverRing();
+    });
+    unsubHover = hoveredHex.subscribe(() => updateHoverRing());
+
+    unsubFollow = followHex.subscribe((hex) => {
+      if (hex) {
+        selectedHex.set(hex);
+        followAircraft();
+      }
+    });
+    unsubFly = flyTo.subscribe((t) => {
+      if (!t || !map) return;
+      followHex.set(null);
+      map.easeTo({
+        center: [t.lon, t.lat],
+        zoom: t.zoom ?? Math.max(map.getZoom(), 8),
+        duration: 600,
+      });
+      flyTo.set(null);
+    });
 
     map.on("moveend", scheduleViewport);
 
@@ -559,6 +636,10 @@
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();
+    unsubFollow?.();
+    unsubFly?.();
+    unsubAircraft?.();
+    unsubHover?.();
     homeMarker?.remove();
     map?.remove();
   });
@@ -580,6 +661,11 @@
 </script>
 
 <div class="map" bind:this={container}></div>
+{#if $followHex}
+  <button class="follow-chip" on:click={() => followHex.set(null)}>
+    ⊙ Following {($aircraft.get($followHex)?.flight ?? $followHex).trim()} — click to stop
+  </button>
+{/if}
 {#if mapError}
   <div class="map-error" title={mapError}>Basemap error: {mapError}</div>
 {/if}
@@ -608,6 +694,21 @@
   }
   :global(.maplibregl-ctrl-attrib) {
     font-size: 10px;
+  }
+  .follow-chip {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   }
   :global(.home-marker) {
     cursor: default;
