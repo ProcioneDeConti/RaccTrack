@@ -58,6 +58,28 @@ CREATE TABLE IF NOT EXISTS tiles (
     fetched_at   INTEGER NOT NULL,
     last_used    INTEGER NOT NULL
 );
+
+-- Generic JSON cache (weather, airspace, chart index, ...). key = "<ns>:<params>".
+CREATE TABLE IF NOT EXISTS kv_cache (
+    key        TEXT PRIMARY KEY,
+    json       TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS geofences (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    label     TEXT NOT NULL,
+    json      TEXT NOT NULL,
+    enabled   INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS chart_pdf (
+    url        TEXT PRIMARY KEY,
+    data       BLOB NOT NULL,
+    bytes      INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    last_used  INTEGER NOT NULL
+);
 "#;
 
 impl Db {
@@ -102,6 +124,45 @@ impl Db {
                 "INSERT INTO settings(k, v) VALUES(?1, ?2)
                  ON CONFLICT(k) DO UPDATE SET v = excluded.v",
                 (key, value),
+            )?;
+            Ok(())
+        })
+    }
+
+    // --- generic JSON cache (kv_cache) ---
+
+    /// Returns the cached JSON string if present and younger than `ttl_ms`.
+    pub fn kv_get(&self, key: &str, ttl_ms: i64) -> Result<Option<String>> {
+        self.with_conn(|c| {
+            let mut stmt =
+                c.prepare("SELECT json, fetched_at FROM kv_cache WHERE key = ?1")?;
+            let mut rows = stmt.query([key])?;
+            if let Some(r) = rows.next()? {
+                let json: String = r.get(0)?;
+                let fetched_at: i64 = r.get(1)?;
+                if crate::util::now_ms() - fetched_at < ttl_ms {
+                    return Ok(Some(json));
+                }
+            }
+            Ok(None)
+        })
+    }
+
+    /// Cached JSON regardless of age (for serving stale on fetch failure).
+    pub fn kv_get_stale(&self, key: &str) -> Result<Option<String>> {
+        self.with_conn(|c| {
+            let mut stmt = c.prepare("SELECT json FROM kv_cache WHERE key = ?1")?;
+            let mut rows = stmt.query([key])?;
+            Ok(rows.next()?.map(|r| r.get::<_, String>(0)).transpose()?)
+        })
+    }
+
+    pub fn kv_put(&self, key: &str, json: &str) -> Result<()> {
+        self.with_conn(|c| {
+            c.execute(
+                "INSERT INTO kv_cache(key, json, fetched_at) VALUES(?1, ?2, ?3)
+                 ON CONFLICT(key) DO UPDATE SET json = excluded.json, fetched_at = excluded.fetched_at",
+                rusqlite::params![key, json, crate::util::now_ms()],
             )?;
             Ok(())
         })

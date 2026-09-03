@@ -1,3 +1,4 @@
+mod airspace;
 mod alerts;
 mod app;
 mod commands;
@@ -11,6 +12,7 @@ mod region;
 mod state;
 mod tiles;
 mod util;
+mod weather;
 
 use std::sync::Arc;
 
@@ -25,11 +27,13 @@ use crate::db::Db;
 use crate::enrich::{
     aircraft_db::AircraftDb, airports::Airports, photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
+use crate::airspace::Airspace;
 use crate::geocode::Geocoder;
 use crate::ingest::{AircraftSource, HttpV2Source};
 use crate::poller::{Poller, SourceStatus};
 use crate::state::LiveState;
 use crate::tiles::TileCache;
+use crate::weather::Weather;
 
 const USER_AGENT: &str = concat!(
     "RaccTrack-ADSB/",
@@ -113,6 +117,8 @@ pub fn run() {
 
             let alerts = Arc::new(Alerts::new(db.clone()));
             let geocoder = Arc::new(Geocoder::new(db.clone(), http.clone()));
+            let weather = Arc::new(Weather::new(db.clone(), http.clone()));
+            let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
             let tiles = Arc::new(TileCache::new(
                 db.clone(),
                 http.clone(),
@@ -134,6 +140,9 @@ pub fn run() {
                 alerts: alerts.clone(),
                 tiles: tiles.clone(),
                 geocoder: geocoder.clone(),
+                weather: weather.clone(),
+                airspace: airspace.clone(),
+                airports: airports.clone(),
                 db: db.clone(),
                 settings: settings.clone(),
                 viewport: viewport.clone(),
@@ -165,6 +174,12 @@ pub fn run() {
             commands::tile_cache_stats,
             commands::clear_tile_cache,
             commands::download_tile_area,
+            commands::airports_in,
+            commands::airport_info,
+            commands::find_airport,
+            commands::metars_in,
+            commands::station_wx,
+            commands::airspace_in,
         ])
         .build(tauri::generate_context!())
         .expect("build tauri app")
@@ -202,19 +217,26 @@ fn spawn_reference_loaders(
             tracing::warn!("aircraft.csv.gz resource not found");
         }
 
-        if let Some(path) = resolve("assets/airports.csv") {
-            match std::fs::read(&path)
-                .map_err(anyhow::Error::from)
-                .and_then(|b| Airports::from_csv_bytes(&b))
-            {
-                Ok(ap) => {
-                    tracing::info!("airports loaded: {} codes", ap.len());
-                    airports.store(Arc::new(ap));
+        let read = |rel: &str| resolve(rel).and_then(|p| std::fs::read(&p).ok());
+        match (
+            read("assets/airports.csv"),
+            read("assets/runways.csv"),
+            read("assets/airport-frequencies.csv"),
+        ) {
+            (Some(ap), rw, fq) => {
+                match Airports::load(
+                    &ap,
+                    &rw.unwrap_or_default(),
+                    &fq.unwrap_or_default(),
+                ) {
+                    Ok(a) => {
+                        tracing::info!("airports loaded: {} airports", a.len());
+                        airports.store(Arc::new(a));
+                    }
+                    Err(e) => tracing::warn!("airports load failed: {e}"),
                 }
-                Err(e) => tracing::warn!("airports load failed ({}): {e}", path.display()),
             }
-        } else {
-            tracing::warn!("airports.csv resource not found");
+            _ => tracing::warn!("airports.csv resource not found"),
         }
     });
 }

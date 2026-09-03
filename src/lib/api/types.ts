@@ -93,6 +93,71 @@ export interface SourceStatus {
   requestsLastMinute: number;
 }
 
+export interface Airport {
+  ident: string;
+  icao: string | null;
+  iata: string | null;
+  name: string;
+  municipality: string | null;
+  region: string | null;
+  lat: number;
+  lon: number;
+  elevationFt: number | null;
+  kind: string;
+}
+
+export interface Runway {
+  name: string;
+  lengthFt: number | null;
+  widthFt: number | null;
+  surface: string | null;
+  lighted: boolean;
+  closed: boolean;
+  leHeading: number | null;
+}
+
+export interface Frequency {
+  kind: string;
+  description: string | null;
+  mhz: string;
+}
+
+export interface AirportInfo extends Airport {
+  runways: Runway[];
+  frequencies: Frequency[];
+}
+
+export interface Metar {
+  icao: string;
+  name: string | null;
+  lat: number;
+  lon: number;
+  obsTime: number | null;
+  raw: string;
+  flightCategory: string | null;
+  tempC: number | null;
+  dewpointC: number | null;
+  windDir: number | string | null;
+  windKt: number | null;
+  gustKt: number | null;
+  visibility: number | string | null;
+  altimeterHpa: number | null;
+  wxString: string | null;
+  clouds: { cover: string | null; baseFt: number | null }[];
+}
+
+export interface StationWx {
+  metar: Metar | null;
+  tafRaw: string | null;
+}
+
+export interface MapLayers {
+  airports: boolean;
+  weather: boolean;
+  airspace: boolean;
+  rangeRings: boolean;
+}
+
 export type WatchKind = "hex" | "registration" | "type" | "callsign";
 
 export interface WatchEntry {
@@ -133,6 +198,10 @@ export interface AppSettings {
   basemap: string;
   home: HomeLocation | null;
   contact: string;
+  layers: MapLayers;
+  rangeRingsNm: number[];
+  pinned: string[];
+  emergencyWatchEnabled: boolean;
   tileCacheEnabled: boolean;
   tileCacheMaxMb: number;
   units: "imperial" | "metric";

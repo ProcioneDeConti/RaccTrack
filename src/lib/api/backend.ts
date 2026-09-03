@@ -42,6 +42,40 @@ export function geocode(query: string): Promise<GeoResult[]> {
   return invoke("geocode", { query });
 }
 
+// --- overlays: airports / weather / airspace ---
+
+import type {
+  Airport,
+  AirportInfo,
+  Metar,
+  StationWx,
+} from "./types";
+
+export function airportsIn(bbox: Bbox, limit?: number): Promise<Airport[]> {
+  return invoke("airports_in", { bbox, limit });
+}
+
+export function airportInfo(code: string): Promise<AirportInfo | null> {
+  return invoke("airport_info", { code });
+}
+
+export function findAirport(query: string): Promise<Airport[]> {
+  return invoke("find_airport", { query });
+}
+
+export function metarsIn(bbox: Bbox): Promise<Metar[]> {
+  return invoke("metars_in", { bbox });
+}
+
+export function stationWx(icao: string): Promise<StationWx> {
+  return invoke("station_wx", { icao });
+}
+
+// deno-lint-ignore no-explicit-any
+export function airspaceIn(bbox: Bbox): Promise<any> {
+  return invoke("airspace_in", { bbox });
+}
+
 // --- watchlist ---
 
 export function listWatch(): Promise<WatchEntry[]> {

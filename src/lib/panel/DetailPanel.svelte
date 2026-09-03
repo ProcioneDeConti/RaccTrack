@@ -164,7 +164,7 @@
     position: absolute;
     top: 14px;
     right: 14px;
-    bottom: 40px;
+    bottom: 14px;
     width: 320px;
     overflow-y: auto;
     background: var(--bg-panel);

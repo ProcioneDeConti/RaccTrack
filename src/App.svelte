@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import MapView from "./lib/map/MapView.svelte";
   import DetailPanel from "./lib/panel/DetailPanel.svelte";
+  import LayersControl from "./lib/map/LayersControl.svelte";
+  import AirportPanel from "./lib/map/AirportPanel.svelte";
   import FilterBar from "./lib/filters/FilterBar.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
@@ -112,15 +114,17 @@
   <div class="stage">
     <MapView bind:this={mapView} />
     <FilterBar />
+    <LayersControl />
     {#if panel === "watchlist"}
       <WatchlistPanel onClose={() => (panel = "none")} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={() => (panel = "none")} {currentBbox} />
     {/if}
     <DetailPanel />
+    <AirportPanel />
     <AlertToast />
-    <StatusBar />
   </div>
+  <StatusBar />
 </main>
 
 <style>
@@ -156,6 +160,7 @@
   }
   .stage {
     position: relative;
-    flex: 1;
+    flex: 1 1 0;
+    min-height: 0;
   }
 </style>

@@ -76,3 +76,35 @@ select {
   background: var(--border);
   border-radius: 6px;
 }
+
+/* MapLibre popups — match the dark app theme (default is white). */
+.maplibregl-popup-content {
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  padding: 8px 10px;
+  font: 12px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip {
+  border-bottom-color: var(--bg-panel);
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: var(--bg-panel);
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--bg-panel);
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--bg-panel);
+}
+.maplibregl-popup-close-button {
+  color: var(--text-dim);
+  font-size: 15px;
+  padding: 0 5px;
+}
+.maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: var(--text);
+}

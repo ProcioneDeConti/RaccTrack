@@ -28,10 +28,7 @@
 
 <style>
   .statusbar {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    flex: 0 0 auto;
     height: 26px;
     display: flex;
     align-items: center;

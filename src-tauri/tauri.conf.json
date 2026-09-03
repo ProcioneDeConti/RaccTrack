@@ -40,7 +40,9 @@
     ],
     "resources": {
       "assets/aircraft.csv.gz": "assets/aircraft.csv.gz",
-      "assets/airports.csv": "assets/airports.csv"
+      "assets/airports.csv": "assets/airports.csv",
+      "assets/runways.csv": "assets/runways.csv",
+      "assets/airport-frequencies.csv": "assets/airport-frequencies.csv"
     }
   },
   "plugins": {}

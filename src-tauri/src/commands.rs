@@ -83,6 +83,61 @@ pub async fn geocode(state: State<'_, AppState>, query: String) -> CmdResult<Vec
     state.geocoder.search(&query).await.map_err(err)
 }
 
+// --- airports / weather / airspace overlays ---
+
+#[tauri::command]
+pub fn airports_in(
+    state: State<AppState>,
+    bbox: Area,
+    limit: Option<usize>,
+) -> Vec<crate::enrich::airports::Airport> {
+    let b = bbox.clamped();
+    state
+        .airports
+        .load()
+        .list_in(b.west, b.south, b.east, b.north, limit.unwrap_or(600))
+}
+
+#[tauri::command]
+pub fn airport_info(
+    state: State<AppState>,
+    code: String,
+) -> Option<crate::enrich::airports::AirportInfo> {
+    state.airports.load().info(&code)
+}
+
+#[tauri::command]
+pub fn find_airport(
+    state: State<AppState>,
+    query: String,
+) -> Vec<crate::enrich::airports::Airport> {
+    state.airports.load().find(&query)
+}
+
+#[tauri::command]
+pub async fn metars_in(
+    state: State<'_, AppState>,
+    bbox: Area,
+) -> CmdResult<Vec<crate::weather::Metar>> {
+    state.weather.metars_in(bbox).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn station_wx(
+    state: State<'_, AppState>,
+    icao: String,
+) -> CmdResult<crate::weather::StationWx> {
+    state.weather.station(&icao).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn airspace_in(
+    state: State<'_, AppState>,
+    bbox: Area,
+) -> CmdResult<serde_json::Value> {
+    state.airspace.in_area(bbox).await.map_err(err)
+}
+
 // --- watchlist ---
 
 #[tauri::command]

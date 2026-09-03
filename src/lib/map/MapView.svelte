@@ -21,6 +21,7 @@
   import { registerAircraftIcons } from "./icons";
   import { addCoverageBoundary } from "./coverage";
   import { makeTransformRequest } from "./tileProxy";
+  import { Overlays } from "./overlays";
   import {
     aircraftGeoJson,
     selectedHex,
@@ -28,9 +29,12 @@
     basemap,
     home,
     goHomeSignal,
+    layers,
+    rangeRingsNm,
+    selectedAirport,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
-  import type { TrailPoint, HomeLocation } from "../api/types";
+  import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
   import { get } from "svelte/store";
 
   let container: HTMLDivElement;
@@ -47,6 +51,16 @@
   let homeMarker: maplibregl.Marker | undefined;
   let activeBasemap = "";
   let themeApplied = "";
+  let overlays: Overlays | undefined;
+  let overlayTimer: number | undefined;
+  let unsubLayers: (() => void) | undefined;
+  let unsubRings: (() => void) | undefined;
+  let curLayers: MapLayers = {
+    airports: false,
+    weather: false,
+    airspace: false,
+    rangeRings: false,
+  };
 
   const EMPTY_FC = { type: "FeatureCollection", features: [] } as const;
 
@@ -66,6 +80,23 @@
   function scheduleViewport() {
     if (moveTimer) clearTimeout(moveTimer);
     moveTimer = window.setTimeout(pushViewport, 400);
+    if (overlayTimer) clearTimeout(overlayTimer);
+    overlayTimer = window.setTimeout(refreshOverlays, 700);
+  }
+
+  function refreshOverlays() {
+    if (!map || !overlays) return;
+    if (!curLayers.airports && !curLayers.weather && !curLayers.airspace) return;
+    const b = map.getBounds();
+    void overlays.refresh(
+      {
+        west: b.getWest(),
+        south: b.getSouth(),
+        east: b.getEast(),
+        north: b.getNorth(),
+      },
+      curLayers,
+    );
   }
 
   function trailToGeoJson(points: TrailPoint[]) {
@@ -152,6 +183,12 @@
       addCoverageBoundary(map);
     } catch (e) {
       console.error("[diag] coverage boundary failed:", (e as Error)?.message ?? e);
+    }
+    try {
+      overlays?.install();
+      overlays?.setVisibility(curLayers);
+    } catch (e) {
+      console.error("[diag] overlays install failed:", (e as Error)?.message ?? e);
     }
 
     const font = styleFont();
@@ -287,13 +324,7 @@
       );
     }
 
-    if (freshInstall) {
-      console.warn(
-        "[diag] layers installed; features:",
-        (get(aircraftGeoJson) as any).features.length,
-      );
-      void refreshTrail();
-    }
+    if (freshInstall) void refreshTrail();
   }
 
   // Event handlers that should be bound exactly once for the map's lifetime.
@@ -314,7 +345,10 @@
     });
     map.on("click", "aircraft-symbol", (e) => {
       const f = e.features?.[0];
-      if (f) selectedHex.set(f.properties?.hex as string);
+      if (f) {
+        selectedAirport.set(null);
+        selectedHex.set(f.properties?.hex as string);
+      }
     });
     map.on("click", (e) => {
       const hits = map!.queryRenderedFeatures(e.point, {
@@ -333,6 +367,8 @@
       cacheEnabled = s.tileCacheEnabled;
       basemapKey = s.basemap;
       initialHome = s.home ?? null;
+      if (s.layers) layers.set(s.layers);
+      if (s.rangeRingsNm?.length) rangeRingsNm.set(s.rangeRingsNm);
     } catch {
       /* backend still starting — use defaults */
     }
@@ -356,6 +392,7 @@
       attributionControl: false,
       transformRequest,
     });
+    overlays = new Overlays(map);
 
     map.on("error", (e) => {
       // Surfaced so a broken basemap / tile source is visible during testing.
@@ -382,19 +419,6 @@
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ unit: "nautical" }), "bottom-left");
 
-    let diagReported = false;
-    map.on("idle", () => {
-      if (diagReported || !map) return;
-      diagReported = true;
-      const feats = map.queryRenderedFeatures();
-      const byLayer: Record<string, number> = {};
-      for (const f of feats) byLayer[f.layer.id] = (byLayer[f.layer.id] ?? 0) + 1;
-      console.warn(
-        `[diag] idle: ${feats.length} rendered features; tilesLoaded=${map.areTilesLoaded()}; ` +
-          `sample layers=${Object.keys(byLayer).slice(0, 8).join(",")}`,
-      );
-    });
-
     // `load` fires on the initial style; `style.load` after a setStyle(); and
     // `styledata` covers edge cases where neither fires as expected. All three
     // funnel through the idempotent installer.
@@ -402,22 +426,15 @@
       installLayers();
       installInteractions();
       pushViewport();
+      refreshOverlays();
     };
     map.on("load", onStyleReady);
     map.on("style.load", onStyleReady);
     map.on("styledata", onStyleReady);
 
-    let loggedData = false;
     unsubGeo = aircraftGeoJson.subscribe((fc) => {
       const src = map?.getSource("aircraft") as GeoJSONSource | undefined;
       src?.setData(fc as any);
-      const n = (fc as any).features.length;
-      if (!loggedData && n > 0) {
-        loggedData = true;
-        console.warn(
-          `[diag] aircraft data: ${n} features pushed; source=${!!src}; layer=${!!map?.getLayer("aircraft-symbol")}`,
-        );
-      }
     });
 
     map.on("moveend", scheduleViewport);
@@ -433,10 +450,26 @@
       map.setStyle(resolveStyleUrl(key));
     });
 
+    // Reference overlays.
+    const drawRings = () => {
+      const rr = get(rangeRingsNm);
+      overlays?.setRangeRings(get(home), rr, curLayers.rangeRings);
+    };
+    unsubLayers = layers.subscribe((l) => {
+      curLayers = l;
+      overlays?.setVisibility(l);
+      drawRings();
+      refreshOverlays();
+    });
+    unsubRings = rangeRingsNm.subscribe(drawRings);
+
     // Home location: seed from settings (initial camera is already set above),
     // drop the marker, and react to later changes.
     home.set(initialHome);
-    unsubHome = home.subscribe((h) => renderHome(h));
+    unsubHome = home.subscribe((h) => {
+      renderHome(h);
+      overlays?.setRangeRings(h, get(rangeRingsNm), curLayers.rangeRings);
+    });
     unsubGoHome = goHomeSignal.subscribe((n) => {
       const h = get(home);
       if (n > 0 && h) recenterHome(h, true);
@@ -517,12 +550,15 @@
   onDestroy(() => {
     if (moveTimer) clearTimeout(moveTimer);
     if (trailTimer) clearInterval(trailTimer);
+    if (overlayTimer) clearTimeout(overlayTimer);
     if (restoreBoundsTimer) clearTimeout(restoreBoundsTimer);
     unsubGeo?.();
     unsubSel?.();
     unsubBasemap?.();
     unsubHome?.();
     unsubGoHome?.();
+    unsubLayers?.();
+    unsubRings?.();
     homeMarker?.remove();
     map?.remove();
   });

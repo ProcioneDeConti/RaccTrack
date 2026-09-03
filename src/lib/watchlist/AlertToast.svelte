@@ -35,7 +35,7 @@
 <style>
   .toast {
     position: absolute;
-    bottom: 40px;
+    bottom: 14px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;

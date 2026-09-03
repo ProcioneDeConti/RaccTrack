@@ -13,10 +13,20 @@ export const filters = writable<Filters>(defaultFilters());
 export const sourceStatus = writable<SourceStatus | null>(null);
 export const basemap = writable<string>("darkMatter");
 
-import type { HomeLocation } from "./api/types";
+import type { HomeLocation, MapLayers } from "./api/types";
 export const home = writable<HomeLocation | null>(null);
 /** bumped to ask MapView to recenter on the home location */
 export const goHomeSignal = writable(0);
+
+export const layers = writable<MapLayers>({
+  airports: false,
+  weather: false,
+  airspace: false,
+  rangeRings: false,
+});
+export const rangeRingsNm = writable<number[]>([25, 50, 100]);
+/** airport ident whose info panel is open */
+export const selectedAirport = writable<string | null>(null);
 
 export function applyDiff(diff: AircraftDiff): void {
   aircraft.update((m) => {

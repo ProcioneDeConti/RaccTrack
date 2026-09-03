@@ -30,11 +30,39 @@ pub struct AppSettings {
     /// to serve exact-airframe photos. Empty = use model photos only.
     #[serde(default)]
     pub contact: String,
+    #[serde(default)]
+    pub layers: MapLayers,
+    #[serde(default = "default_range_rings")]
+    pub range_rings_nm: Vec<f64>,
+    #[serde(default)]
+    pub pinned: Vec<String>,
+    #[serde(default = "default_true")]
+    pub emergency_watch_enabled: bool,
     pub tile_cache_enabled: bool,
     pub tile_cache_max_mb: u64,
     pub units: String, // "imperial" | "metric"
     pub notifications_enabled: bool,
     pub show_all_trails: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MapLayers {
+    #[serde(default)]
+    pub airports: bool,
+    #[serde(default)]
+    pub weather: bool,
+    #[serde(default)]
+    pub airspace: bool,
+    #[serde(default)]
+    pub range_rings: bool,
+}
+
+fn default_range_rings() -> Vec<f64> {
+    vec![25.0, 50.0, 100.0]
+}
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AppSettings {
@@ -47,6 +75,10 @@ impl Default for AppSettings {
             basemap: "darkMatter".into(),
             home: None,
             contact: String::new(),
+            layers: MapLayers::default(),
+            range_rings_nm: default_range_rings(),
+            pinned: Vec::new(),
+            emergency_watch_enabled: true,
             tile_cache_enabled: false,
             tile_cache_max_mb: 500,
             units: "imperial".into(),
