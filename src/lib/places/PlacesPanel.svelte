@@ -13,6 +13,22 @@
   let searching = false;
   let error = "";
   let expanded: string | null = null;
+  let editingId: string | null = null;
+  let editLabel = "";
+
+  const focusSelect = (el: HTMLInputElement) => {
+    el.focus();
+    el.select();
+  };
+  function startRename(p: Place) {
+    editingId = p.id;
+    editLabel = p.label;
+  }
+  function commitRename(id: string) {
+    const label = editLabel.trim();
+    editingId = null;
+    if (label) void patch(id, (p) => ({ ...p, label }));
+  }
 
   async function search() {
     const q = query.trim();
@@ -118,14 +134,36 @@
             >
               <Icon name="star" size={13} />
             </button>
-            <button
-              class="name"
-              title="Fly to {p.label}"
-              on:click={() => {
-                selectedHex.set(null);
-                flyTo.set({ lat: p.lat, lon: p.lon, zoom: p.bbox ? 8 : 11 });
-              }}>{p.label}</button
-            >
+            {#if editingId === p.id}
+              <input
+                class="rename"
+                bind:value={editLabel}
+                use:focusSelect
+                on:blur={() => commitRename(p.id)}
+                on:keydown={(e) => {
+                  if (e.key === "Enter") commitRename(p.id);
+                  else if (e.key === "Escape") editingId = null;
+                }}
+              />
+            {:else}
+              <button
+                class="name"
+                title="Fly to {p.label}"
+                on:click={() => {
+                  selectedHex.set(null);
+                  flyTo.set({ lat: p.lat, lon: p.lon, zoom: p.bbox ? 8 : 11 });
+                }}
+                on:dblclick={() => startRename(p)}>{p.label}</button
+              >
+              <button
+                class="edit"
+                title="Rename"
+                aria-label="Rename"
+                on:click={() => startRename(p)}
+              >
+                <Icon name="pencil" size={11} />
+              </button>
+            {/if}
             <label class="al" title="Proximity alert">
               <input
                 type="checkbox"
@@ -302,6 +340,24 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .rename {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 1px 4px;
+  }
+  .edit {
+    flex: 0 0 auto;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    display: inline-flex;
+    padding: 3px;
+  }
+  .edit:hover {
+    color: var(--text);
   }
   .coord {
     font-size: 10px;
