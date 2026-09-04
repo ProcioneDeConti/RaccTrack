@@ -10,7 +10,6 @@ import type {
 } from "maplibre-gl";
 import type { Bbox } from "./region";
 import type { Airport, MapLayers, Metar } from "../api/types";
-import type { HomeLocation } from "../api/types";
 import { airportsIn, metarsIn, airspaceIn } from "../api/backend";
 import { selectedAirport, selectedHex } from "../state";
 import {
@@ -57,6 +56,27 @@ export class Overlays {
   /** Current radar tile URL template — survives style swaps so a re-install
    *  re-creates the source with the right frame. */
   private radarUrl: string | null = null;
+
+  /** Last place-alert ring FeatureCollection — survives style swaps. */
+  private placeAlertData: unknown = null;
+
+  /** Draw a dashed ring at each alert-enabled place's radius. */
+  setPlaceRings(places: { lat: number; lon: number; alert: { enabled: boolean; radiusNm: number } }[]) {
+    const features = places
+      .filter((p) => p.alert.enabled && Number.isFinite(p.lat) && Number.isFinite(p.lon))
+      .map((p) => ({
+        type: "Feature" as const,
+        geometry: {
+          type: "LineString" as const,
+          coordinates: circle(p.lat, p.lon, p.alert.radiusNm),
+        },
+        properties: {},
+      }));
+    this.placeAlertData = { type: "FeatureCollection", features };
+    (this.map.getSource("ov-place-alert") as GeoJSONSource | undefined)?.setData(
+      this.placeAlertData as any,
+    );
+  }
 
   /** Point the radar layer at a new frame (or null before the first fetch). */
   setRadarFrame(url: string | null) {
@@ -108,6 +128,12 @@ export class Overlays {
     }
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
+    }
+    if (!m.getSource("ov-place-alert")) {
+      m.addSource("ov-place-alert", {
+        type: "geojson",
+        data: (this.placeAlertData ?? EMPTY) as any,
+      });
     }
     if (!m.getSource("ov-radar")) {
       m.addSource("ov-radar", {
@@ -169,6 +195,19 @@ export class Overlays {
         "line-width": 1.6,
         "line-dasharray": [3, 3],
         "line-opacity": 0.95,
+      },
+    });
+
+    add({
+      id: "ov-place-alert-line",
+      type: "line",
+      source: "ov-place-alert",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#f0a020",
+        "line-width": 1.6,
+        "line-dasharray": [2, 2],
+        "line-opacity": 0.9,
       },
     });
 
@@ -340,7 +379,11 @@ export class Overlays {
     } as any);
   }
 
-  setRangeRings(home: HomeLocation | null, radiiNm: number[], show: boolean) {
+  setRangeRings(
+    home: { lat: number; lon: number } | null,
+    radiiNm: number[],
+    show: boolean,
+  ) {
     const src = this.map.getSource("ov-rings") as GeoJSONSource | undefined;
     if (!src) return;
     if (!home || !show || radiiNm.length === 0) {

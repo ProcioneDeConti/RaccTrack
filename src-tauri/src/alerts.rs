@@ -7,12 +7,34 @@ use anyhow::{bail, Result};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
+use crate::config::Place;
 use crate::db::Db;
 use crate::ingest::model::Aircraft;
 use crate::state::AircraftDiff;
 use crate::util::now_ms;
 
 const EMERGENCY_SQUAWKS: [&str; 4] = ["7500", "7600", "7700", "7777"];
+
+/// Great-circle distance in nautical miles.
+fn haversine_nm(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let r = 3440.065_f64; // earth radius, nm
+    let (p1, p2) = (lat1.to_radians(), lat2.to_radians());
+    let dp = (lat2 - lat1).to_radians();
+    let dl = (lon2 - lon1).to_radians();
+    let a = (dp / 2.0).sin().powi(2) + p1.cos() * p2.cos() * (dl / 2.0).sin().powi(2);
+    2.0 * r * a.sqrt().asin()
+}
+
+/// Stable fired-set key for a place id — large positive so it can't collide
+/// with a watch row id (autoincrement, small) or the emergency key (-1).
+fn place_key(id: &str) -> i64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in id.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100_0000_01b3);
+    }
+    100_000_000 + (h % 1_000_000_000) as i64
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -178,9 +200,11 @@ impl Alerts {
         })
     }
 
-    /// Evaluate a fresh diff against the watchlist + emergency rules.
-    pub fn evaluate(&self, diff: &AircraftDiff) -> Vec<AlertEvent> {
+    /// Evaluate a fresh diff against the watchlist + emergency rules + the
+    /// proximity alerts on saved places.
+    pub fn evaluate(&self, diff: &AircraftDiff, places: &[Place]) -> Vec<AlertEvent> {
         let watches = self.list().unwrap_or_default();
+        let geofences: Vec<&Place> = places.iter().filter(|p| p.alert.enabled).collect();
         let mut out = Vec::new();
         let now = now_ms();
 
@@ -244,6 +268,39 @@ impl Alerts {
                         emergency: false,
                         at: now,
                     });
+                }
+            }
+
+            // Proximity alerts on saved places.
+            if let (Some(lat), Some(lon)) = (ac.lat, ac.lon) {
+                for p in &geofences {
+                    let d = haversine_nm(p.lat, p.lon, lat, lon);
+                    if d > p.alert.radius_nm {
+                        continue;
+                    }
+                    if let Some(ceil) = p.alert.ceiling_ft {
+                        if ac.alt_baro.map(|a| a > ceil).unwrap_or(true) {
+                            continue;
+                        }
+                    }
+                    if p.alert.notable_only
+                        && !(ac.military || ac.interesting || ac.pia || ac.ladd)
+                    {
+                        continue;
+                    }
+                    if self.mark(&ac.hex, place_key(&p.id)) {
+                        let alt = ac
+                            .alt_baro
+                            .map(|a| format!(" at {} ft", a.round() as i64))
+                            .unwrap_or_default();
+                        out.push(AlertEvent {
+                            hex: ac.hex.clone(),
+                            reason: format!("{:.0} nm from {}{alt}", d, p.label),
+                            watch_id: None,
+                            emergency: false,
+                            at: now,
+                        });
+                    }
                 }
             }
         }
@@ -316,24 +373,30 @@ mod tests {
         let mut ac = base("abc");
         ac.squawk = Some("7700".into());
 
-        let ev = a.evaluate(&diff_with(vec![ac.clone()]));
+        let ev = a.evaluate(&diff_with(vec![ac.clone()]), &[]);
         assert_eq!(ev.len(), 1);
         assert!(ev[0].emergency);
 
         // Same aircraft still present -> no repeat.
-        let ev = a.evaluate(&AircraftDiff {
-            updated: vec![ac.clone()],
-            ..Default::default()
-        });
+        let ev = a.evaluate(
+            &AircraftDiff {
+                updated: vec![ac.clone()],
+                ..Default::default()
+            },
+            &[],
+        );
         assert!(ev.is_empty());
 
         // Leaves and returns -> fires again.
-        let ev = a.evaluate(&AircraftDiff {
-            removed: vec!["abc".into()],
-            ..Default::default()
-        });
+        let ev = a.evaluate(
+            &AircraftDiff {
+                removed: vec!["abc".into()],
+                ..Default::default()
+            },
+            &[],
+        );
         assert!(ev.is_empty());
-        let ev = a.evaluate(&diff_with(vec![ac]));
+        let ev = a.evaluate(&diff_with(vec![ac]), &[]);
         assert_eq!(ev.len(), 1);
     }
 
@@ -345,8 +408,62 @@ mod tests {
 
         let mut ac = base("x");
         ac.type_code = Some("B738".into());
-        let ev = a.evaluate(&diff_with(vec![ac]));
+        let ev = a.evaluate(&diff_with(vec![ac]), &[]);
         assert_eq!(ev.len(), 1);
         assert_eq!(ev[0].watch_id.is_some(), true);
+    }
+
+    #[test]
+    fn place_proximity_alert() {
+        use crate::config::{Place, PlaceAlert};
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let a = Alerts::new(db);
+        let place = Place {
+            id: "p1".into(),
+            label: "Home".into(),
+            lat: 40.0,
+            lon: -73.0,
+            kind: None,
+            bbox: None,
+            primary: true,
+            alert: PlaceAlert {
+                enabled: true,
+                radius_nm: 10.0,
+                ceiling_ft: Some(8000.0),
+                notable_only: false,
+            },
+        };
+
+        // ~4 nm away, 5000 ft -> fires
+        let mut near = base("near");
+        near.lat = Some(40.05);
+        near.lon = Some(-73.0);
+        near.alt_baro = Some(5000.0);
+        // 4 nm away but at 30000 ft -> above the ceiling, no alert
+        let mut high = base("high");
+        high.lat = Some(40.05);
+        high.lon = Some(-73.0);
+        high.alt_baro = Some(30000.0);
+        // 60 nm away -> outside radius
+        let mut far = base("far");
+        far.lat = Some(41.0);
+        far.lon = Some(-73.0);
+        far.alt_baro = Some(3000.0);
+
+        let ev = a.evaluate(&diff_with(vec![near, high, far]), std::slice::from_ref(&place));
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].hex, "near");
+        assert!(ev[0].reason.contains("Home"));
+
+        // no repeat while it stays in view
+        let mut still = base("near");
+        still.lat = Some(40.05);
+        still.lon = Some(-73.0);
+        still.alt_baro = Some(5000.0);
+        let ev = a.evaluate(
+            &AircraftDiff { updated: vec![still], ..Default::default() },
+            std::slice::from_ref(&place),
+        );
+        assert!(ev.is_empty());
     }
 }

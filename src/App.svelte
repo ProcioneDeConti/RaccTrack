@@ -7,6 +7,7 @@
   import ChartViewer from "./lib/charts/ChartViewer.svelte";
   import FiltersPanel from "./lib/filters/FiltersPanel.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
+  import PlacesPanel from "./lib/places/PlacesPanel.svelte";
   import EventsPanel from "./lib/history/EventsPanel.svelte";
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
@@ -22,6 +23,7 @@
     resetAircraft,
     sourceStatus,
     pinned,
+    places,
     emergencyCount,
   } from "./lib/state";
   import {
@@ -44,6 +46,7 @@
     | "filters"
     | "layers"
     | "watchlist"
+    | "places"
     | "events"
     | "logbook"
     | "settings"
@@ -82,6 +85,7 @@
         notificationsEnabled = s.notificationsEnabled;
         units.set(s.units);
         pinned.set(s.pinned ?? []);
+        places.set(s.places ?? []);
       } catch {
         /* backend still starting */
       }
@@ -137,6 +141,8 @@
       <LayersPanel onClose={close} />
     {:else if panel === "watchlist"}
       <WatchlistPanel onClose={close} />
+    {:else if panel === "places"}
+      <PlacesPanel onClose={close} />
     {:else if panel === "events"}
       <EventsPanel onClose={close} />
     {:else if panel === "logbook"}

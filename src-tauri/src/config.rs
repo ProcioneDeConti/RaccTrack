@@ -18,6 +18,64 @@ pub struct HomeLocation {
     pub bbox: Option<[f64; 4]>,
 }
 
+/// A saved location. One is `primary` (drives the "go to" button + range
+/// rings); each can carry a proximity alert.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Place {
+    pub id: String,
+    pub label: String,
+    pub lat: f64,
+    pub lon: f64,
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// [west, south, east, north] — for camera framing of area places.
+    #[serde(default)]
+    pub bbox: Option<[f64; 4]>,
+    #[serde(default)]
+    pub primary: bool,
+    #[serde(default)]
+    pub alert: PlaceAlert,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaceAlert {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_alert_radius")]
+    pub radius_nm: f64,
+    /// Only alert when the aircraft is at or below this baro altitude (ft).
+    #[serde(default)]
+    pub ceiling_ft: Option<f64>,
+    /// Only alert for military / interesting / PIA / LADD airframes.
+    #[serde(default)]
+    pub notable_only: bool,
+}
+
+impl Default for PlaceAlert {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            radius_nm: default_alert_radius(),
+            ceiling_ft: None,
+            notable_only: false,
+        }
+    }
+}
+
+fn default_alert_radius() -> f64 {
+    10.0
+}
+
+pub fn new_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let t = crate::util::now_ms() as u64;
+    let n = N.fetch_add(1, Ordering::Relaxed);
+    format!("p{t:x}{n:x}")
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -30,8 +88,11 @@ pub struct AppSettings {
     #[serde(default = "default_local_receiver_url")]
     pub local_receiver_url: String,
     pub basemap: String,
-    #[serde(default)]
+    /// Legacy single home — migrated into `places` on load, then left null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home: Option<HomeLocation>,
+    #[serde(default)]
+    pub places: Vec<Place>,
     /// Contact URL or email — planespotters.net requires one in the User-Agent
     /// to serve exact-airframe photos. Empty = use model photos only.
     #[serde(default)]
@@ -96,6 +157,7 @@ impl Default for AppSettings {
             local_receiver_url: default_local_receiver_url(),
             basemap: "darkMatter".into(),
             home: None,
+            places: Vec::new(),
             contact: String::new(),
             layers: MapLayers::default(),
             range_rings_nm: default_range_rings(),
@@ -115,11 +177,43 @@ impl Default for AppSettings {
 
 impl AppSettings {
     pub fn load(db: &Db) -> Self {
-        db.get_setting(KEY)
+        let mut s: Self = db
+            .get_setting(KEY)
             .ok()
             .flatten()
             .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+            .unwrap_or_default();
+        s.migrate();
+        s
+    }
+
+    /// Fold the legacy single `home` into `places`.
+    fn migrate(&mut self) {
+        if let Some(home) = self.home.take() {
+            if self.places.is_empty() {
+                self.places.push(Place {
+                    id: new_id(),
+                    label: home.label,
+                    lat: home.lat,
+                    lon: home.lon,
+                    kind: None,
+                    bbox: home.bbox,
+                    primary: true,
+                    alert: PlaceAlert::default(),
+                });
+            }
+        }
+        // Exactly one primary.
+        if !self.places.is_empty() && !self.places.iter().any(|p| p.primary) {
+            self.places[0].primary = true;
+        }
+    }
+
+    pub fn primary_place(&self) -> Option<&Place> {
+        self.places
+            .iter()
+            .find(|p| p.primary)
+            .or_else(|| self.places.first())
     }
 
     pub fn save(&self, db: &Db) -> Result<()> {
@@ -140,6 +234,10 @@ impl AppSettings {
         if self.units != "metric" {
             self.units = "imperial".into();
         }
+        for p in &mut self.places {
+            p.alert.radius_nm = p.alert.radius_nm.clamp(0.5, 250.0);
+        }
+        self.migrate(); // keep the one-primary invariant
     }
 }
 

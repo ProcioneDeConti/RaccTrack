@@ -4,7 +4,7 @@
     visibleAircraft,
     selectedHex,
     hoveredHex,
-    home,
+    primaryPlace,
     pinned,
     togglePin,
     followHex,
@@ -41,7 +41,7 @@
   }
 
   function distOf(a: Aircraft): number {
-    const h = $home;
+    const h = $primaryPlace;
     if (!h || a.lat === null || a.lon === null) return Infinity;
     return distanceNm(h.lat, h.lon, a.lat, a.lon);
   }

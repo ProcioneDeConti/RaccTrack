@@ -29,7 +29,7 @@
     }}
   >
     <strong>
-      {#if $lastAlert.emergency}<Icon name="alert-triangle" size={13} /> Emergency{:else}Watch hit{/if}
+      {#if $lastAlert.emergency}<Icon name="alert-triangle" size={13} /> Emergency{:else if $lastAlert.watchId != null}Watch hit{:else}Alert{/if}
     </strong>
     <span>{$lastAlert.hex} — {$lastAlert.reason}</span>
   </button>

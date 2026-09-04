@@ -6,7 +6,6 @@
     tileCacheStats,
     clearTileCache,
     downloadTileArea,
-    geocode,
     onDownloadProgress,
     clearHistory,
     clearLogbook,
@@ -15,12 +14,11 @@
     type TileCacheStats,
     type DownloadProgress,
   } from "../api/backend";
-  import type { AppSettings, GeoResult, HomeLocation } from "../api/types";
+  import type { AppSettings } from "../api/types";
   import { units } from "../format";
-  import { basemap, home, goHomeSignal } from "../state";
+  import { basemap } from "../state";
   import { BASEMAP_THEMES } from "../map/style";
   import { clipToRegion, type Bbox } from "../map/region";
-  import Icon from "../ui/Icon.svelte";
   import Panel from "../ui/Panel.svelte";
   import { humanizeError } from "../ui/errors";
 
@@ -57,47 +55,6 @@
   function setBasemap(key: string) {
     basemap.set(key); // live-swaps the map style
     void patch({ basemap: key }); // persists
-  }
-
-  // --- home location ---
-  let homeQuery = "";
-  let homeResults: GeoResult[] = [];
-  let homeSearching = false;
-  let homeError = "";
-
-  async function searchHome() {
-    const q = homeQuery.trim();
-    if (!q) return;
-    homeSearching = true;
-    homeError = "";
-    homeResults = [];
-    try {
-      homeResults = await geocode(q);
-      if (homeResults.length === 0) homeError = "No matches.";
-    } catch (e) {
-      homeError = humanizeError(e);
-    } finally {
-      homeSearching = false;
-    }
-  }
-
-  async function pickHome(r: GeoResult) {
-    const h: HomeLocation = {
-      label: r.label,
-      lat: r.lat,
-      lon: r.lon,
-      bbox: r.bbox,
-    };
-    home.set(h);
-    homeResults = [];
-    homeQuery = "";
-    goHomeSignal.update((n) => n + 1);
-    await patch({ home: h });
-  }
-
-  async function clearHome() {
-    home.set(null);
-    await patch({ home: null });
   }
 
   async function refreshCache() {
@@ -218,40 +175,6 @@
       </select>
     </label>
 
-    <hr />
-    <h4>Home location</h4>
-    <form class="home-search" on:submit|preventDefault={searchHome}>
-      <input
-        type="text"
-        placeholder="state, city, ZIP, address, or lat, lon"
-        bind:value={homeQuery}
-      />
-      <button type="submit" disabled={homeSearching}>
-        {homeSearching ? "…" : "Search"}
-      </button>
-    </form>
-    {#if homeError}<p class="err">{homeError}</p>{/if}
-    {#if homeResults.length}
-      <ul class="results">
-        {#each homeResults as r}
-          <li>
-            <button on:click={() => pickHome(r)}>
-              <span class="lbl">{r.label}</span>
-              <span class="kind">{r.kind}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-    {#if $home}
-      <div class="current-home">
-        <span class="hl" title={$home.label}><Icon name="home" size={13} /> {$home.label}</span>
-        <span class="home-actions">
-          <button on:click={() => goHomeSignal.update((n) => n + 1)}>Go</button>
-          <button on:click={clearHome}>Clear</button>
-        </span>
-      </div>
-    {/if}
     <hr />
 
     <h4>Aircraft photos</h4>
@@ -404,14 +327,6 @@
     flex-direction: column;
     gap: 8px;
   }
-  .hl {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
   .row {
     display: flex;
     justify-content: space-between;
@@ -454,69 +369,5 @@
   }
   .stack input {
     width: 100%;
-  }
-  .home-search {
-    display: flex;
-    gap: 4px;
-  }
-  .home-search input {
-    flex: 1;
-    min-width: 0;
-  }
-  .results {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    max-height: 180px;
-    overflow-y: auto;
-  }
-  .results button {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 8px;
-    text-align: left;
-    font-size: 12px;
-    padding: 5px 8px;
-  }
-  .results .lbl {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .results .kind {
-    color: var(--text-dim);
-    font-size: 10px;
-    flex-shrink: 0;
-  }
-  .current-home {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-  }
-  .current-home > span:first-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .home-actions {
-    display: flex;
-    gap: 4px;
-    flex-shrink: 0;
-  }
-  .home-actions button {
-    font-size: 11px;
-    padding: 2px 8px;
-  }
-  .err {
-    color: var(--emergency);
-    font-size: 11px;
-    margin: 0;
   }
 </style>

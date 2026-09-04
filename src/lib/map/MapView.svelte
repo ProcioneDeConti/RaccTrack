@@ -31,7 +31,8 @@
     selectedHex,
     hoveredHex,
     basemap,
-    home,
+    places,
+    primaryPlace,
     goHomeSignal,
     layers,
     rangeRingsNm,
@@ -42,7 +43,7 @@
     routeLine,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
-  import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
+  import type { TrailPoint, MapLayers, Place } from "../api/types";
   import { get } from "svelte/store";
   import { ACCENT, EMERGENCY, ALT_GRADIENT } from "../theme/colors";
 
@@ -64,9 +65,9 @@
   let unsubGeo: (() => void) | undefined;
   let unsubSel: (() => void) | undefined;
   let unsubBasemap: (() => void) | undefined;
-  let unsubHome: (() => void) | undefined;
+  let unsubPlaces: (() => void) | undefined;
   let unsubGoHome: (() => void) | undefined;
-  let homeMarker: maplibregl.Marker | undefined;
+  let placeMarkers = new Map<string, maplibregl.Marker>();
   let activeBasemap = "";
   let themeApplied = "";
   let overlays: Overlays | undefined;
@@ -527,12 +528,12 @@
   onMount(async () => {
     let cacheEnabled = false;
     let basemapKey = "darkMatter";
-    let initialHome: HomeLocation | null = null;
+    let initialPlaces: Place[] = [];
     try {
       const s = await getSettings();
       cacheEnabled = s.tileCacheEnabled;
       basemapKey = s.basemap;
-      initialHome = s.home ?? null;
+      initialPlaces = s.places ?? [];
       if (s.layers) layers.set(s.layers);
       if (s.rangeRingsNm?.length) rangeRingsNm.set(s.rangeRingsNm);
     } catch {
@@ -543,8 +544,10 @@
     const styleUrl = resolveStyleUrl(basemapKey);
     const transformRequest = await makeTransformRequest(cacheEnabled);
 
-    const start = initialHome
-      ? homeCamera(initialHome)
+    const startPlace =
+      initialPlaces.find((p) => p.primary) ?? initialPlaces[0] ?? null;
+    const start = startPlace
+      ? placeCamera(startPlace)
       : { center: INITIAL_CENTER, zoom: INITIAL_ZOOM };
 
     map = new maplibregl.Map({
@@ -609,7 +612,12 @@
       settleRetries = 0;
       ensureLayers();
       overlays?.setVisibility(curLayers);
-      overlays?.setRangeRings(get(home), get(rangeRingsNm), curLayers.rangeRings);
+      overlays?.setRangeRings(
+        get(primaryPlace),
+        get(rangeRingsNm),
+        curLayers.rangeRings,
+      );
+      overlays?.setPlaceRings(get(places));
       syncSelected();
       pushViewport();
       refreshOverlays();
@@ -673,7 +681,7 @@
     // Reference overlays.
     const drawRings = () => {
       const rr = get(rangeRingsNm);
-      overlays?.setRangeRings(get(home), rr, curLayers.rangeRings);
+      overlays?.setRangeRings(get(primaryPlace), rr, curLayers.rangeRings);
     };
     let radarWasOn = false;
     unsubLayers = layers.subscribe((l) => {
@@ -689,44 +697,63 @@
       if (curLayers.radar) void refreshRadar();
     }, 5 * 60 * 1000);
 
-    // Home location: seed from settings (initial camera is already set above),
-    // drop the marker, and react to later changes.
-    home.set(initialHome);
-    unsubHome = home.subscribe((h) => {
-      renderHome(h);
-      overlays?.setRangeRings(h, get(rangeRingsNm), curLayers.rangeRings);
+    // Saved places: seed from settings (initial camera is already set above),
+    // drop the markers + alert rings, and react to later changes.
+    places.set(initialPlaces);
+    unsubPlaces = places.subscribe((ps) => {
+      renderPlaces(ps);
+      overlays?.setPlaceRings(ps);
+      drawRings();
     });
     unsubGoHome = goHomeSignal.subscribe((n) => {
-      const h = get(home);
-      if (n > 0 && h) recenterHome(h, true);
+      const p = get(primaryPlace);
+      if (n > 0 && p) recenterHome(p, true);
     });
   });
 
-  function renderHome(h: HomeLocation | null) {
-    if (!map) return;
-    if (!h || !Number.isFinite(h.lon) || !Number.isFinite(h.lat)) {
-      homeMarker?.remove();
-      homeMarker = undefined;
-      return;
-    }
-    if (!homeMarker) {
-      const el = document.createElement("div");
-      el.className = "home-marker";
-      el.innerHTML =
-        `<svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2 C7 2 3.5 6 3.5 10.5 C3.5 17 12 23 12 23 C12 23 20.5 17 20.5 10.5 C20.5 6 17 2 12 2 Z" fill="${ACCENT}" stroke="#0b1220" stroke-width="1.5"/><circle cx="12" cy="10.5" r="3.4" fill="#0b1220"/></svg>`;
-      // setLngLat BEFORE addTo — a Marker added without a position throws every
-      // render frame from MapLibre's projection helper and freezes the map.
-      homeMarker = new maplibregl.Marker({ element: el, anchor: "bottom" })
-        .setLngLat([h.lon, h.lat])
-        .addTo(map);
-    } else {
-      homeMarker.setLngLat([h.lon, h.lat]);
-    }
-    homeMarker.getElement().title = `Home — ${h.label}`;
+  function placePinSvg(primary: boolean): string {
+    const fill = primary ? ACCENT : "#8b949e";
+    return `<svg viewBox="0 0 24 24" width="${primary ? 26 : 22}" height="${primary ? 26 : 22}"><path d="M12 2 C7 2 3.5 6 3.5 10.5 C3.5 17 12 23 12 23 C12 23 20.5 17 20.5 10.5 C20.5 6 17 2 12 2 Z" fill="${fill}" stroke="#0b1220" stroke-width="1.5"/><circle cx="12" cy="10.5" r="3.4" fill="#0b1220"/></svg>`;
   }
 
-  /** A valid, region-clamped center + zoom for a home location. */
-  function homeCamera(h: HomeLocation): {
+  function renderPlaces(ps: Place[]) {
+    if (!map) return;
+    const wanted = new Set(ps.map((p) => p.id));
+    for (const [id, m] of placeMarkers) {
+      if (!wanted.has(id)) {
+        m.remove();
+        placeMarkers.delete(id);
+      }
+    }
+    for (const p of ps) {
+      if (!Number.isFinite(p.lon) || !Number.isFinite(p.lat)) continue;
+      let m = placeMarkers.get(p.id);
+      if (!m) {
+        const el = document.createElement("div");
+        el.className = "place-marker";
+        // setLngLat BEFORE addTo — a Marker added without a position throws
+        // every render frame and freezes the map.
+        m = new maplibregl.Marker({ element: el, anchor: "bottom" })
+          .setLngLat([p.lon, p.lat])
+          .addTo(map);
+        placeMarkers.set(p.id, m);
+      } else {
+        m.setLngLat([p.lon, p.lat]);
+      }
+      const el = m.getElement();
+      el.innerHTML = placePinSvg(p.primary);
+      el.title = p.alert.enabled
+        ? `${p.label} · alert ${p.alert.radiusNm} nm`
+        : p.label;
+      el.onclick = (ev) => {
+        ev.stopPropagation();
+        flyTo.set({ lat: p.lat, lon: p.lon, zoom: Math.max(map!.getZoom(), 9) });
+      };
+    }
+  }
+
+  /** A valid, region-clamped center + zoom for a place. */
+  function placeCamera(h: Place): {
     center: [number, number];
     zoom: number;
   } {
@@ -755,9 +782,9 @@
 
   let restoreBoundsTimer: number | undefined;
 
-  function recenterHome(h: HomeLocation, animate: boolean) {
+  function recenterHome(h: Place, animate: boolean) {
     if (!map) return;
-    const { center, zoom } = homeCamera(h);
+    const { center, zoom } = placeCamera(h);
     const m = map;
 
     // Animating with `maxBounds` set can throw repeatedly from MapLibre's camera
@@ -783,7 +810,7 @@
     unsubGeo?.();
     unsubSel?.();
     unsubBasemap?.();
-    unsubHome?.();
+    unsubPlaces?.();
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();
@@ -792,7 +819,8 @@
     unsubAircraft?.();
     unsubHover?.();
     unsubRoute?.();
-    homeMarker?.remove();
+    for (const m of placeMarkers.values()) m.remove();
+    placeMarkers.clear();
     map?.remove();
   });
 
@@ -898,11 +926,11 @@
     font-weight: 600;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   }
-  :global(.home-marker) {
-    cursor: default;
+  :global(.place-marker) {
+    cursor: pointer;
     filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
   }
-  :global(.home-marker svg) {
+  :global(.place-marker svg) {
     display: block;
   }
 </style>

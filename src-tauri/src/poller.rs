@@ -180,7 +180,8 @@ impl Poller {
                         self.logbook.record(&diff.added, now);
                     }
 
-                    let alerts = self.alerts.evaluate(&diff);
+                    let places = self.settings.lock().places.clone();
+                    let alerts = self.alerts.evaluate(&diff, &places);
 
                     if self.settings.lock().history_enabled {
                         let mut events = std::mem::take(&mut diff.events);

@@ -24,6 +24,11 @@ Built with **Tauri 2 + Rust** (backend) and **Svelte + MapLibre GL** (frontend).
 - **Watchlist alerts**: desktop notification when a watched hex / registration /
   type / callsign appears, or when any emergency squawk (7500 / 7600 / 7700)
   shows up.
+- **Places & proximity alerts**: save any number of locations; each can fire an
+  alert when an aircraft passes within a set radius (and optionally below a set
+  altitude, or only for military / interesting airframes).
+- **Spotter logbook**: every airframe that's been in view, with first/last seen,
+  a sighting count, your notes, and CSV export.
 - **Offline basemap cache**: map tiles are cached locally as you pan; "Download
   current area" pre-fetches a region so it keeps rendering offline.
 - **Local receiver** (optional): point it at your own dump1090-fa / readsb /

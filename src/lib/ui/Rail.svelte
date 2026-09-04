@@ -2,7 +2,13 @@
   import { createEventDispatcher } from "svelte";
   import Icon from "./Icon.svelte";
   import type { IconName } from "./Icon.svelte";
-  import { filters, layers, home, goHomeSignal, visibleAircraft } from "../state";
+  import {
+    filters,
+    layers,
+    primaryPlace,
+    goHomeSignal,
+    visibleAircraft,
+  } from "../state";
   import { isDefault } from "../filters/filters";
 
   /** Which panel is currently open ("none" when closed). */
@@ -35,6 +41,7 @@
     { id: "filters", icon: "filter", label: "Filters", dot: filtersOn },
     { id: "layers", icon: "layers", label: "Map layers", dot: layersOn },
     { id: "watchlist", icon: "star", label: "Watchlist" },
+    { id: "places", icon: "map-pin", label: "Places & alerts" },
     { id: "events", icon: "activity", label: "Events & history" },
     { id: "logbook", icon: "book", label: "Spotter logbook" },
   ] satisfies Item[];
@@ -60,9 +67,11 @@
   <div class="group">
     <button
       class="home"
-      title={$home ? `Go to home — ${$home.label}` : "Set a home location in Settings"}
-      aria-label="Go to home location"
-      disabled={!$home}
+      title={$primaryPlace
+        ? `Go to ${$primaryPlace.label}`
+        : "Add a place first"}
+      aria-label="Go to primary place"
+      disabled={!$primaryPlace}
       on:click={() => goHomeSignal.update((n) => n + 1)}
     >
       <Icon name="home" size={19} />

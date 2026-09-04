@@ -16,9 +16,15 @@ export const sourceStatus = writable<SourceStatus | null>(null);
 export const emergencyCount = writable(0);
 export const basemap = writable<string>("darkMatter");
 
-import type { HomeLocation, MapLayers } from "./api/types";
-export const home = writable<HomeLocation | null>(null);
-/** bumped to ask MapView to recenter on the home location */
+import type { MapLayers, Place } from "./api/types";
+/** All saved locations. */
+export const places = writable<Place[]>([]);
+/** The primary place — drives the rail "go to" button + range rings. */
+export const primaryPlace = derived(
+  places,
+  ($p) => $p.find((x) => x.primary) ?? $p[0] ?? null,
+);
+/** bumped to ask MapView to recenter on the primary place */
 export const goHomeSignal = writable(0);
 
 export const layers = writable<MapLayers>({

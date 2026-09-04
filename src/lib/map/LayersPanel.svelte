@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { layers, home } from "../state";
+  import { layers, primaryPlace } from "../state";
   import { updateSettings } from "../api/backend";
   import type { MapLayers } from "../api/types";
   import Panel from "../ui/Panel.svelte";
@@ -103,11 +103,11 @@
   <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
   <label><input type="checkbox" checked={l.radar} on:change={() => toggle("radar")} /> Weather radar</label>
   <label><input type="checkbox" checked={l.airspace} on:change={() => toggle("airspace")} /> Airspace</label>
-  <label class:disabled={!$home} title={$home ? "" : "Set a home location first"}>
+  <label class:disabled={!$primaryPlace} title={$primaryPlace ? "" : "Add a place first"}>
     <input
       type="checkbox"
       checked={l.rangeRings}
-      disabled={!$home}
+      disabled={!$primaryPlace}
       on:change={() => toggle("rangeRings")}
     /> Range rings
   </label>

@@ -296,6 +296,24 @@ export interface GeoResult {
   kind: string;
 }
 
+export interface PlaceAlert {
+  enabled: boolean;
+  radiusNm: number;
+  ceilingFt: number | null;
+  notableOnly: boolean;
+}
+
+export interface Place {
+  id: string;
+  label: string;
+  lat: number;
+  lon: number;
+  kind: string | null;
+  bbox: [number, number, number, number] | null;
+  primary: boolean;
+  alert: PlaceAlert;
+}
+
 export interface AppSettings {
   pollIntervalMs: number;
   sourceOrder: string[];
@@ -303,6 +321,7 @@ export interface AppSettings {
   localReceiverUrl: string;
   basemap: string;
   home: HomeLocation | null;
+  places: Place[];
   contact: string;
   layers: MapLayers;
   rangeRingsNm: number[];
