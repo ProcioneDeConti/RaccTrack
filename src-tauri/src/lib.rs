@@ -38,7 +38,7 @@ use crate::charts::Charts;
 use crate::datalink::Datalink;
 use crate::emergency_watch::EmergencyWatch;
 use crate::geocode::Geocoder;
-use crate::ingest::{AircraftSource, HttpV2Source};
+use crate::ingest::{AircraftSource, HttpV2Source, LocalReceiverSource};
 use crate::poller::{Poller, SourceStatus};
 use crate::state::LiveState;
 use crate::tiles::TileCache;
@@ -163,6 +163,7 @@ pub fn run() {
             let status = Arc::new(Mutex::new(SourceStatus::default()));
 
             let sources: Vec<Arc<dyn AircraftSource>> = vec![
+                Arc::new(LocalReceiverSource::new(http.clone(), settings.clone())),
                 Arc::new(HttpV2Source::adsb_lol(http.clone())),
                 Arc::new(HttpV2Source::adsb_fi(http.clone())),
             ];
@@ -209,6 +210,7 @@ pub fn run() {
             commands::aircraft_history,
             commands::recent_events,
             commands::clear_history,
+            commands::test_local_receiver,
             commands::get_source_status,
             commands::log_frontend,
             commands::geocode,

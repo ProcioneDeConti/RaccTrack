@@ -3,12 +3,15 @@
 //! dump1090/readsb feed) implements the same trait and slots into the
 //! orchestrator without touching the rest of the app.
 
+pub mod local;
 pub mod model;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use model::{Aircraft, AircraftResponse, RawAircraft};
 use std::time::Duration;
+
+pub use local::LocalReceiverSource;
 
 use crate::region::Area;
 

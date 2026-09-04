@@ -9,8 +9,9 @@ use crate::app::AppState;
 use crate::config::AppSettings;
 use crate::enrich::AircraftDetail;
 use crate::geocode::GeoResult;
-use crate::ingest::model::Aircraft;
+use crate::ingest::model::{Aircraft, AircraftResponse};
 use crate::ingest::normalize;
+use serde::Serialize;
 use crate::region::Area;
 use crate::state::{AircraftDiff, AircraftEvent, TrailPoint};
 use crate::tiles::{DownloadProgress, TileCacheStats};
@@ -85,6 +86,37 @@ async fn fetch_aircraft_by_hex(state: &AppState, hex: &str) -> Option<Aircraft> 
 #[tauri::command]
 pub fn get_trail(state: State<AppState>, hex: String) -> Vec<TrailPoint> {
     state.live.trail(&hex)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalReceiverProbe {
+    pub aircraft: usize,
+    pub with_position: usize,
+}
+
+/// One-off probe of a local dump1090/readsb `aircraft.json` URL, for the
+/// Settings "test connection" button.
+#[tauri::command]
+pub async fn test_local_receiver(url: String) -> CmdResult<LocalReceiverProbe> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(err)?;
+    let resp = client.get(url.trim()).send().await.map_err(err)?;
+    if !resp.status().is_success() {
+        return Err(format!("receiver returned HTTP {}", resp.status()));
+    }
+    let body: AircraftResponse = resp.json().await.map_err(err)?;
+    let with_position = body
+        .ac
+        .iter()
+        .filter(|a| a.lat.is_some() && a.lon.is_some())
+        .count();
+    Ok(LocalReceiverProbe {
+        aircraft: body.ac.len(),
+        with_position,
+    })
 }
 
 // --- flight-event history ---

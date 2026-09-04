@@ -83,14 +83,30 @@ impl Poller {
         }
     }
 
-    /// Order sources per the user's `source_order` preference.
+    /// Order sources per the user's `source_order` preference. A local receiver,
+    /// when enabled, is always tried first (and dropped entirely when disabled).
     fn ordered_sources(&self) -> Vec<Arc<dyn AircraftSource>> {
-        let order = self.settings.lock().source_order.clone();
-        let mut ranked: Vec<_> = self.sources.iter().cloned().collect();
+        let (order, local_on) = {
+            let s = self.settings.lock();
+            (s.source_order.clone(), s.local_receiver_enabled)
+        };
+        let is_local = |s: &Arc<dyn AircraftSource>| {
+            s.name() == crate::ingest::local::NAME
+        };
+        let mut ranked: Vec<_> = self
+            .sources
+            .iter()
+            .filter(|s| !is_local(s) || local_on)
+            .cloned()
+            .collect();
         ranked.sort_by_key(|s| {
+            if is_local(s) {
+                return 0;
+            }
             order
                 .iter()
                 .position(|n| n == s.name())
+                .map(|p| p + 1)
                 .unwrap_or(usize::MAX)
         });
         ranked

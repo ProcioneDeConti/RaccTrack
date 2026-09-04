@@ -9,6 +9,7 @@
     geocode,
     onDownloadProgress,
     clearHistory,
+    testLocalReceiver,
     type TileCacheStats,
     type DownloadProgress,
   } from "../api/backend";
@@ -122,6 +123,27 @@
   function mb(bytes: number): string {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
+
+  // --- local receiver ---
+  let rxTesting = false;
+  let rxResult: string | null = null;
+  let rxOk = false;
+
+  async function testRx() {
+    if (!s) return;
+    rxTesting = true;
+    rxResult = null;
+    try {
+      const p = await testLocalReceiver(s.localReceiverUrl);
+      rxOk = true;
+      rxResult = `${p.aircraft} aircraft (${p.withPosition} with position)`;
+    } catch (e) {
+      rxOk = false;
+      rxResult = humanizeError(e);
+    } finally {
+      rxTesting = false;
+    }
+  }
 </script>
 
 <Panel title="Settings" {onClose} width={320}>
@@ -133,12 +155,49 @@
         value={s.pollIntervalMs}
         on:change={(e) => patch({ pollIntervalMs: +e.currentTarget.value })}
       >
+        {#if s.localReceiverEnabled}<option value={1000}>1 s</option>{/if}
         <option value={2000}>2 s</option>
         <option value={3000}>3 s</option>
         <option value={5000}>5 s</option>
         <option value={10000}>10 s</option>
       </select>
     </label>
+
+    <hr />
+    <h4>Local ADS-B receiver</h4>
+    <label class="row">
+      <span>Use a local receiver (dump1090 / readsb / tar1090)</span>
+      <input
+        type="checkbox"
+        checked={s.localReceiverEnabled}
+        on:change={(e) =>
+          patch({ localReceiverEnabled: e.currentTarget.checked })}
+      />
+    </label>
+    {#if s.localReceiverEnabled}
+      <input
+        type="text"
+        value={s.localReceiverUrl}
+        placeholder="http://localhost:8080/data/aircraft.json"
+        on:change={(e) => {
+          patch({ localReceiverUrl: e.currentTarget.value.trim() });
+          rxResult = null;
+        }}
+      />
+      <div class="row">
+        <button on:click={testRx} disabled={rxTesting}>
+          {rxTesting ? "Testing…" : "Test connection"}
+        </button>
+        {#if rxResult}
+          <span class="rx" class:ok={rxOk} class:bad={!rxOk}>{rxResult}</span>
+        {/if}
+      </div>
+      <p class="muted">
+        Tried first, with the community feeds as automatic fallback if it's
+        unreachable. A faster poll interval is worth it — no rate limits.
+      </p>
+    {/if}
+    <hr />
 
     <label class="row">
       Map theme
@@ -344,6 +403,17 @@
   }
   .muted {
     color: var(--text-dim);
+    font-size: 11px;
+  }
+  .rx {
+    font-size: 11px;
+    text-align: right;
+  }
+  .rx.ok {
+    color: var(--ok);
+  }
+  .rx.bad {
+    color: var(--emergency);
   }
   .stack {
     display: flex;

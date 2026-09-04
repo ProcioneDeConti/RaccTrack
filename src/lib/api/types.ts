@@ -285,6 +285,8 @@ export interface GeoResult {
 export interface AppSettings {
   pollIntervalMs: number;
   sourceOrder: string[];
+  localReceiverEnabled: boolean;
+  localReceiverUrl: string;
   basemap: string;
   home: HomeLocation | null;
   contact: string;
@@ -299,4 +301,9 @@ export interface AppSettings {
   units: "imperial" | "metric";
   notificationsEnabled: boolean;
   showAllTrails: boolean;
+}
+
+export interface LocalReceiverProbe {
+  aircraft: number;
+  withPosition: number;
 }

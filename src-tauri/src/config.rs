@@ -23,6 +23,12 @@ pub struct HomeLocation {
 pub struct AppSettings {
     pub poll_interval_ms: u64,
     pub source_order: Vec<String>,
+    /// Use a local dump1090/readsb `aircraft.json` feed. When on it's tried
+    /// first, falling back to the community aggregators if unreachable.
+    #[serde(default)]
+    pub local_receiver_enabled: bool,
+    #[serde(default = "default_local_receiver_url")]
+    pub local_receiver_url: String,
     pub basemap: String,
     #[serde(default)]
     pub home: Option<HomeLocation>,
@@ -71,6 +77,9 @@ fn default_true() -> bool {
 fn default_history_days() -> u32 {
     30
 }
+fn default_local_receiver_url() -> String {
+    crate::ingest::local::DEFAULT_URL.to_string()
+}
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -79,6 +88,8 @@ impl Default for AppSettings {
             // adsb.fi has proven more tolerant of viewport polling; adsb.lol is
             // the fallback. Both are free community ODbL feeds.
             source_order: vec!["adsb.fi".into(), "adsb.lol".into()],
+            local_receiver_enabled: false,
+            local_receiver_url: default_local_receiver_url(),
             basemap: "darkMatter".into(),
             home: None,
             contact: String::new(),

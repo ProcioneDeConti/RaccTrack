@@ -7,6 +7,7 @@ import type {
   AlertEvent,
   AppSettings,
   GeoResult,
+  LocalReceiverProbe,
   SourceStatus,
   TrailPoint,
   WatchEntry,
@@ -41,6 +42,10 @@ export function recentEvents(limit?: number): Promise<AircraftEvent[]> {
 
 export function clearHistory(): Promise<void> {
   return invoke("clear_history");
+}
+
+export function testLocalReceiver(url: string): Promise<LocalReceiverProbe> {
+  return invoke("test_local_receiver", { url });
 }
 
 export function getAllTrails(): Promise<Record<string, TrailPoint[]>> {

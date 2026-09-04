@@ -26,6 +26,9 @@ Built with **Tauri 2 + Rust** (backend) and **Svelte + MapLibre GL** (frontend).
   shows up.
 - **Offline basemap cache**: map tiles are cached locally as you pan; "Download
   current area" pre-fetches a region so it keeps rendering offline.
+- **Local receiver** (optional): point it at your own dump1090-fa / readsb /
+  tar1090 `aircraft.json` — no rate limits, sub-second updates, MLAT, your own
+  coverage. Falls back to the community feeds if the receiver is unreachable.
 
 ## What it can't do (no free data source exists)
 
@@ -40,6 +43,7 @@ See [`FEASIBILITY.md`](./FEASIBILITY.md) for the full research writeup.
 | Purpose | Source | Notes |
 |---|---|---|
 | Live ADS-B | [adsb.lol](https://adsb.lol) (primary), [adsb.fi](https://adsb.fi) (fallback) | No key. ODbL. Viewport-scoped polling, ≤ ~1 req/s. |
+| Live ADS-B (optional) | your own **dump1090-fa / readsb / tar1090** `aircraft.json` | Settings → Local ADS-B receiver. Tried first, community feeds fall back if unreachable. |
 | Aircraft identity | Mictronics DB via [tar1090-db](https://github.com/wiedehopf/tar1090-db) | Bundled `src-tauri/assets/aircraft.csv.gz`. ODC-BY. |
 | Airports | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/airports.csv` (+ `runways.csv`, `airport-frequencies.csv`). Public domain. |
 | Airline callsigns | [OpenFlights](https://openflights.org/data.html) | Bundled `src-tauri/assets/airlines.dat`. ODbL. |
@@ -89,7 +93,7 @@ src/                     Svelte frontend
   lib/watchlist/         watchlist manager + alert toast/log
   lib/settings/          settings, home-location search, tile cache controls
 src-tauri/src/
-  ingest/                AircraftSource trait + adsb.lol / adsb.fi HTTP sources
+  ingest/                AircraftSource trait; adsb.lol / adsb.fi HTTP + local receiver (dump1090/readsb)
   state.rs               live aircraft map, diffing, trail buffers
   enrich/                identity DB, airports, routes, photos, country
   geocode.rs             home-location search (Photon + coordinate parsing)
