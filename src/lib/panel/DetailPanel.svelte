@@ -13,18 +13,12 @@
   import type { AircraftDetail } from "../api/types";
   import DatalinkSection from "./DatalinkSection.svelte";
   import RouteProgress from "./RouteProgress.svelte";
+  import IdentitySection from "./IdentitySection.svelte";
+  import TelemetrySection from "./TelemetrySection.svelte";
   import HistorySection from "../history/HistorySection.svelte";
   import Icon from "../ui/Icon.svelte";
   import Message from "../ui/Message.svelte";
   import { humanizeError } from "../ui/errors";
-  import {
-    altitude,
-    speed,
-    verticalRate,
-    degrees,
-    age,
-    squawkMeaning,
-  } from "../format";
   import { distanceNm, gcPath, projectOntoTrack } from "../geo";
 
   let detail: AircraftDetail | null = null;
@@ -71,20 +65,9 @@
 
   // Live telemetry comes from the aircraft store so it updates between detail fetches.
   $: live = currentHex ? ($aircraft.get(currentHex) ?? detail?.aircraft ?? null) : null;
-  $: sqMeaning = squawkMeaning(live?.squawk ?? null);
 
   $: photos = detail?.photos ?? [];
   $: photo = photos[Math.min(photoIdx, Math.max(0, photos.length - 1))] ?? null;
-
-  // --- type / age ---
-  $: td = detail?.typeDetails ?? null;
-  $: engineLine = td && td.engines && td.engType
-    ? `${td.engines} × ${td.engType.toLowerCase()}`
-    : null;
-  $: builtYear = detail?.built ? parseInt(detail.built, 10) : NaN;
-  $: builtLine = Number.isFinite(builtYear)
-    ? `${builtYear} (${new Date().getFullYear() - builtYear} yr)`
-    : null;
 
   // --- route progress ---
   // computeProgress calls gcPath(…,96) + projectOntoTrack; `live` is a fresh
@@ -263,44 +246,9 @@
       <Message kind="error" onRetry={() => currentHex && load(currentHex)}>{error}</Message>
     {/if}
 
-    <section>
-      <h4>Identity</h4>
-      <dl>
-        <dt>Registration</dt><dd>{detail?.aircraft.registration ?? live?.registration ?? "—"}</dd>
-        <dt>Type</dt>
-        <dd>
-          {detail?.aircraft.typeCode ?? live?.typeCode ?? "—"}
-          {#if detail?.aircraft.description}— {detail.aircraft.description}{/if}
-        </dd>
-        {#if engineLine}
-          <dt>Engines</dt><dd>{engineLine}</dd>
-        {/if}
-        {#if td?.wtc}
-          <dt>Wake category</dt><dd>{td.wtc}</dd>
-        {/if}
-        {#if builtLine}
-          <dt>Built</dt><dd>{builtLine}</dd>
-        {/if}
-        <dt>Operator</dt>
-        <dd>
-          {#if detail?.operator}
-            {detail.operator.name}
-            {#if detail.operator.telephony}
-              <span class="muted">· “{detail.operator.telephony}”</span>
-            {/if}
-          {:else}
-            {detail?.ownerOperator ?? "—"}
-          {/if}
-        </dd>
-        {#if detail?.operator && detail.ownerOperator && detail.ownerOperator !== detail.operator.name}
-          <dt>Registered to</dt><dd>{detail.ownerOperator}</dd>
-        {/if}
-        <dt>Country</dt><dd>{detail?.country ?? "—"}</dd>
-        <dt>ICAO hex</dt><dd class="mono">{currentHex}</dd>
-      </dl>
-    </section>
+    <IdentitySection {detail} {live} hex={currentHex} />
 
-    <section>
+    <section class="panel-section">
       <h4>Route</h4>
       {#if detail?.route && (detail.route.originIcao || detail.route.destinationIcao)}
         <RouteProgress {detail} {prog} />
@@ -309,32 +257,7 @@
       {/if}
     </section>
 
-    <section>
-      <h4>Live telemetry</h4>
-      <dl>
-        <dt>Altitude (baro)</dt><dd>{altitude(live?.altBaro ?? null)}</dd>
-        <dt>Altitude (geom)</dt><dd>{altitude(live?.altGeom ?? null)}</dd>
-        <dt>Ground speed</dt><dd>{speed(live?.groundSpeed ?? null)}</dd>
-        <dt>IAS / TAS</dt><dd>{speed(live?.ias ?? null)} / {speed(live?.tas ?? null)}</dd>
-        <dt>Mach</dt><dd>{live?.mach ?? "—"}</dd>
-        <dt>Track</dt><dd>{degrees(live?.track ?? null)}</dd>
-        <dt>Heading</dt><dd>{degrees(live?.trueHeading ?? live?.magHeading ?? null)}</dd>
-        <dt>Vertical rate</dt>
-        <dd class="vr">
-          {#if (live?.baroRate ?? live?.geomRate ?? 0) > 0}<Icon name="arrow-up" size={11} />
-          {:else if (live?.baroRate ?? live?.geomRate ?? 0) < 0}<Icon name="arrow-down" size={11} />{/if}
-          {verticalRate(live?.baroRate ?? live?.geomRate ?? null)}
-        </dd>
-        <dt>Squawk</dt>
-        <dd>{live?.squawk ?? "—"}{#if sqMeaning} <span class="muted">— {sqMeaning}</span>{/if}</dd>
-        <dt>Selected alt</dt><dd>{altitude(live?.navAltitude ?? null)}</dd>
-        <dt>On ground</dt><dd>{live?.onGround ? "yes" : "no"}</dd>
-        <dt>Position source</dt><dd>{live?.positionSource ?? "—"}</dd>
-        <dt>Signal</dt><dd>{live?.rssi ?? "—"} dBFS · {live?.messages ?? "—"} msgs</dd>
-        <dt>Last message</dt><dd>{age(live?.seen ?? null)}</dd>
-        <dt>Feed</dt><dd>{live?.source ?? "—"}</dd>
-      </dl>
-    </section>
+    <TelemetrySection {live} />
 
     {#if currentHex}
       <HistorySection hex={currentHex} />
@@ -518,36 +441,6 @@
     background: rgba(0, 0, 0, 0.35);
     border-radius: 4px;
     padding: 4px;
-  }
-  section {
-    border-top: 1px solid var(--border);
-    padding-top: 8px;
-    margin-top: 8px;
-  }
-  dl {
-    display: grid;
-    grid-template-columns: 40% 60%;
-    gap: 2px 8px;
-    margin: 0;
-  }
-  dt {
-    color: var(--text-dim);
-  }
-  dd {
-    margin: 0;
-    text-align: right;
-  }
-  .mono,
-  .muted {
-    color: var(--text-dim);
-  }
-  .mono {
-    font-family: ui-monospace, monospace;
-  }
-  dd.vr :global(svg) {
-    display: inline-block;
-    vertical-align: middle;
-    color: var(--text-dim);
   }
   footer {
     margin-top: 12px;

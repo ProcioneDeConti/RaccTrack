@@ -100,6 +100,28 @@ h5,
   outline-offset: 1px;
 }
 
+/* Panel content section — hairline divider + spacing. */
+.panel-section {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+/* Key/value grid used in the aircraft / airport detail panels. */
+.kv {
+  display: grid;
+  grid-template-columns: 40% 60%;
+  gap: 2px 8px;
+  margin: 0;
+}
+.kv dt {
+  color: var(--text-dim);
+}
+.kv dd {
+  margin: 0;
+  text-align: right;
+}
+
 /* Borderless accent-text button (Reset / Clear / inline actions). */
 .btn-link {
   border: none;

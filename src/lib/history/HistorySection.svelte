@@ -33,7 +33,7 @@
   onDestroy(() => void stop.then((f) => f()));
 </script>
 
-<section>
+<section class="panel-section">
   <h4>History</h4>
   {#if loading && events.length === 0}
     <Message kind="loading">Loading…</Message>

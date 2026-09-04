@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount, tick } from "svelte";
   import {
     visibleAircraft,
     selectedHex,
@@ -71,6 +72,39 @@
     return sortAsc ? c : -c;
   });
 
+  // --- windowed rendering: only the rows near the viewport are in the DOM ---
+  const ROW_H = 25;
+  const BUFFER = 6;
+  let scrollEl: HTMLDivElement;
+  let scrollTop = 0;
+  let viewH = 0;
+
+  onMount(() => {
+    viewH = scrollEl?.clientHeight ?? 0;
+    const ro = new ResizeObserver(() => (viewH = scrollEl.clientHeight));
+    if (scrollEl) ro.observe(scrollEl);
+    return () => ro.disconnect();
+  });
+
+  function onScroll() {
+    scrollTop = scrollEl.scrollTop;
+  }
+
+  $: startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - BUFFER);
+  $: endIdx = Math.min(
+    rows.length,
+    Math.ceil((scrollTop + viewH) / ROW_H) + BUFFER,
+  );
+  $: windowRows = rows.slice(startIdx, endIdx);
+  $: padTop = startIdx * ROW_H;
+  $: padBottom = Math.max(0, (rows.length - endIdx) * ROW_H);
+
+  async function resort(c: Col) {
+    setSort(c);
+    await tick();
+    scrollEl?.scrollTo({ top: 0 });
+  }
+
   function pick(a: Aircraft) {
     selectedHex.set(a.hex);
     if (a.lat !== null && a.lon !== null)
@@ -86,6 +120,7 @@
 </script>
 
 <Panel title="{rows.length} in view" {onClose} width={340} bodyPad={false}>
+  <div class="scroll" bind:this={scrollEl} on:scroll={onScroll}>
     <table>
       <thead>
         <tr>
@@ -93,7 +128,7 @@
           {#each COLS as col}
             <th
               class:sorted={sortCol === col.c}
-              on:click={() => setSort(col.c)}
+              on:click={() => resort(col.c)}
             >
               {col.label}{#if sortCol === col.c}<span class="caret"><Icon name={sortAsc ? "chevron-up" : "chevron-down"} size={11} /></span>{/if}
             </th>
@@ -101,7 +136,8 @@
         </tr>
       </thead>
       <tbody>
-        {#each rows.slice(0, 400) as a (a.hex)}
+        {#if padTop}<tr class="pad" style="height:{padTop}px"><td colspan={COLS.length + 1}></td></tr>{/if}
+        {#each windowRows as a (a.hex)}
           <tr
             class:sel={$selectedHex === a.hex}
             class:follow={$followHex === a.hex}
@@ -135,14 +171,20 @@
             </td>
           </tr>
         {/each}
+        {#if padBottom}<tr class="pad" style="height:{padBottom}px"><td colspan={COLS.length + 1}></td></tr>{/if}
       </tbody>
     </table>
     {#if rows.length === 0}
       <Message kind="empty">No aircraft in view.</Message>
     {/if}
+  </div>
 </Panel>
 
 <style>
+  .scroll {
+    height: 100%;
+    overflow-y: auto;
+  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -158,6 +200,14 @@
     cursor: pointer;
     white-space: nowrap;
     border-bottom: 1px solid var(--border);
+    z-index: 1;
+  }
+  tbody tr:not(.pad) {
+    height: 25px;
+  }
+  tr.pad td {
+    padding: 0;
+    border: 0;
   }
   th.sorted {
     color: var(--text);

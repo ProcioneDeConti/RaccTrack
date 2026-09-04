@@ -56,7 +56,7 @@
   }
 </script>
 
-<section>
+<section class="panel-section">
   <h4>
     Datalink
     {#if loaded}
