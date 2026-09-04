@@ -3,7 +3,7 @@ import type { AlertEvent, WatchEntry } from "../api/types";
 import { listWatch } from "../api/backend";
 
 export const watchEntries = writable<WatchEntry[]>([]);
-export const alertLog = writable<AlertEvent[]>([]);
+/** Most recent alert — drives the toast. Full history lives in the Events panel. */
 export const lastAlert = writable<AlertEvent | null>(null);
 
 export async function refreshWatch(): Promise<void> {
@@ -11,6 +11,5 @@ export async function refreshWatch(): Promise<void> {
 }
 
 export function pushAlert(a: AlertEvent): void {
-  alertLog.update((l) => [a, ...l].slice(0, 100));
   lastAlert.set(a);
 }

@@ -12,7 +12,7 @@ use crate::geocode::GeoResult;
 use crate::ingest::model::Aircraft;
 use crate::ingest::normalize;
 use crate::region::Area;
-use crate::state::{AircraftDiff, TrailPoint};
+use crate::state::{AircraftDiff, AircraftEvent, TrailPoint};
 use crate::tiles::{DownloadProgress, TileCacheStats};
 use crate::poller::SourceStatus;
 use crate::util::now_ms;
@@ -85,6 +85,32 @@ async fn fetch_aircraft_by_hex(state: &AppState, hex: &str) -> Option<Aircraft> 
 #[tauri::command]
 pub fn get_trail(state: State<AppState>, hex: String) -> Vec<TrailPoint> {
     state.live.trail(&hex)
+}
+
+// --- flight-event history ---
+
+#[tauri::command]
+pub fn aircraft_history(state: State<AppState>, hex: String) -> CmdResult<Vec<AircraftEvent>> {
+    state
+        .history
+        .for_hex(&hex.to_lowercase(), 200)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn recent_events(
+    state: State<AppState>,
+    limit: Option<i64>,
+) -> CmdResult<Vec<AircraftEvent>> {
+    state
+        .history
+        .recent(limit.unwrap_or(300).clamp(1, 2000))
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn clear_history(state: State<AppState>) -> CmdResult<()> {
+    state.history.clear().map_err(err)
 }
 
 #[tauri::command]

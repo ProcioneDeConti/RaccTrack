@@ -13,6 +13,7 @@
   import type { AircraftDetail } from "../api/types";
   import DatalinkSection from "./DatalinkSection.svelte";
   import RouteProgress from "./RouteProgress.svelte";
+  import HistorySection from "../history/HistorySection.svelte";
   import Icon from "../ui/Icon.svelte";
   import {
     altitude,
@@ -308,6 +309,7 @@
     </section>
 
     {#if currentHex}
+      <HistorySection hex={currentHex} />
       {#key currentHex}
         <DatalinkSection hex={currentHex} />
       {/key}

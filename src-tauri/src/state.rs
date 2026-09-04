@@ -4,7 +4,7 @@
 use std::collections::VecDeque;
 
 use dashmap::DashMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ingest::model::Aircraft;
 
@@ -46,6 +46,114 @@ pub struct AircraftDiff {
     pub removed: Vec<String>,
     pub total: u64,
     pub generated_at: i64,
+    /// Notable state changes detected this cycle — persisted to history +
+    /// emitted separately by the poller, not part of the frontend diff payload.
+    #[serde(skip)]
+    pub events: Vec<AircraftEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+    Squawk,
+    Emergency,
+    EmergencyClear,
+    Callsign,
+    Takeoff,
+    Landing,
+    /// A watchlist / preset rule fired (recorded from `alerts::evaluate`).
+    Alert,
+}
+
+impl EventKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            EventKind::Squawk => "squawk",
+            EventKind::Emergency => "emergency",
+            EventKind::EmergencyClear => "emergency_clear",
+            EventKind::Callsign => "callsign",
+            EventKind::Takeoff => "takeoff",
+            EventKind::Landing => "landing",
+            EventKind::Alert => "alert",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "squawk" => EventKind::Squawk,
+            "emergency" => EventKind::Emergency,
+            "emergency_clear" => EventKind::EmergencyClear,
+            "callsign" => EventKind::Callsign,
+            "takeoff" => EventKind::Takeoff,
+            "landing" => EventKind::Landing,
+            "alert" => EventKind::Alert,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AircraftEvent {
+    pub hex: String,
+    pub at: i64,
+    pub kind: EventKind,
+    /// Callsign at the time of the event, if known.
+    pub flight: Option<String>,
+    /// Squawk/callsign: the previous value.
+    pub from: Option<String>,
+    /// Squawk/callsign: the new value. Emergency: the squawk code. Alert: reason.
+    pub to: Option<String>,
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+}
+
+const EMERGENCY_SQUAWKS: [&str; 3] = ["7500", "7600", "7700"];
+
+fn is_emergency_squawk(s: Option<&str>) -> bool {
+    s.map(|s| EMERGENCY_SQUAWKS.contains(&s)).unwrap_or(false)
+}
+
+/// Compare an aircraft's previous and current state, pushing any notable
+/// transitions onto `out`.
+fn detect_events(prev: &Aircraft, next: &Aircraft, now: i64, out: &mut Vec<AircraftEvent>) {
+    let mk = |kind, from, to| AircraftEvent {
+        hex: next.hex.clone(),
+        at: now,
+        kind,
+        flight: next.flight.clone(),
+        from,
+        to,
+        lat: next.lat,
+        lon: next.lon,
+    };
+
+    if prev.squawk != next.squawk {
+        let was = is_emergency_squawk(prev.squawk.as_deref());
+        let is = is_emergency_squawk(next.squawk.as_deref());
+        if is && !was {
+            out.push(mk(EventKind::Emergency, prev.squawk.clone(), next.squawk.clone()));
+        } else if was && !is {
+            out.push(mk(
+                EventKind::EmergencyClear,
+                prev.squawk.clone(),
+                next.squawk.clone(),
+            ));
+        } else if next.squawk.is_some() {
+            out.push(mk(EventKind::Squawk, prev.squawk.clone(), next.squawk.clone()));
+        }
+    }
+
+    if let (Some(a), Some(b)) = (prev.flight.as_deref(), next.flight.as_deref()) {
+        if !a.is_empty() && !b.is_empty() && a != b {
+            out.push(mk(EventKind::Callsign, prev.flight.clone(), next.flight.clone()));
+        }
+    }
+
+    if prev.on_ground && !next.on_ground {
+        out.push(mk(EventKind::Takeoff, None, None));
+    } else if !prev.on_ground && next.on_ground {
+        out.push(mk(EventKind::Landing, None, None));
+    }
 }
 
 pub struct LiveState {
@@ -128,6 +236,7 @@ impl LiveState {
 
             match self.aircraft.entry(ac.hex.clone()) {
                 dashmap::mapref::entry::Entry::Occupied(mut e) => {
+                    detect_events(e.get(), &ac, now_ms, &mut diff.events);
                     e.insert(ac.clone());
                     diff.updated.push(ac);
                 }
@@ -250,6 +359,42 @@ mod tests {
         // Now past the stale window -> removed.
         let d4 = s.ingest(vec![], 0, 70_000);
         assert_eq!(d4.removed, vec!["a".to_string()]);
+    }
+
+    #[test]
+    fn detects_squawk_emergency_and_movement() {
+        let s = LiveState::new();
+        let mut a = ac("a", 40.0, -73.0, 0);
+        a.on_ground = true;
+        s.ingest(vec![a.clone()], 1, 0);
+
+        // takeoff + squawk assignment
+        a.on_ground = false;
+        a.squawk = Some("1200".into());
+        let d = s.ingest(vec![a.clone()], 1, 1000);
+        let kinds: Vec<_> = d.events.iter().map(|e| e.kind).collect();
+        assert!(kinds.contains(&EventKind::Takeoff));
+        assert!(kinds.contains(&EventKind::Squawk));
+        assert!(s.airborne("a").unwrap().saw_departure);
+
+        // squawk -> emergency
+        a.squawk = Some("7700".into());
+        let d = s.ingest(vec![a.clone()], 1, 2000);
+        assert_eq!(d.events.iter().filter(|e| e.kind == EventKind::Emergency).count(), 1);
+
+        // emergency cleared
+        a.squawk = Some("4321".into());
+        let d = s.ingest(vec![a.clone()], 1, 3000);
+        assert_eq!(
+            d.events.iter().filter(|e| e.kind == EventKind::EmergencyClear).count(),
+            1
+        );
+
+        // landing drops the airborne record
+        a.on_ground = true;
+        let d = s.ingest(vec![a], 1, 4000);
+        assert!(d.events.iter().any(|e| e.kind == EventKind::Landing));
+        assert!(s.airborne("a").is_none());
     }
 
     #[test]

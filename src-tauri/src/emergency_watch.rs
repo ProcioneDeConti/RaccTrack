@@ -11,8 +11,10 @@ use tauri::{AppHandle, Emitter};
 
 use crate::alerts::AlertEvent;
 use crate::config::AppSettings;
+use crate::history::History;
 use crate::ingest::model::AircraftResponse;
 use crate::region::Area;
+use crate::state::{AircraftEvent, EventKind};
 use crate::util::now_ms;
 
 const INTERVAL: Duration = Duration::from_secs(75);
@@ -27,15 +29,21 @@ const FORGET_AFTER: u32 = 3;
 pub struct EmergencyWatch {
     client: reqwest::Client,
     settings: Arc<Mutex<AppSettings>>,
+    history: Arc<History>,
     /// hex -> polls-since-last-seen
     seen: Mutex<HashMap<String, u32>>,
 }
 
 impl EmergencyWatch {
-    pub fn new(client: reqwest::Client, settings: Arc<Mutex<AppSettings>>) -> Self {
+    pub fn new(
+        client: reqwest::Client,
+        settings: Arc<Mutex<AppSettings>>,
+        history: Arc<History>,
+    ) -> Self {
         Self {
             client,
             settings,
+            history,
             seen: Mutex::new(HashMap::new()),
         }
     }
@@ -54,7 +62,8 @@ impl EmergencyWatch {
 
     /// Returns extra cool-down to add after this cycle (on rate limiting).
     async fn poll(&self, app: &AppHandle) -> Duration {
-        let mut present: HashMap<String, &'static str> = HashMap::new();
+        // hex -> (squawk code, human reason)
+        let mut present: HashMap<String, (&'static str, &'static str)> = HashMap::new();
         let mut rate_limited = false;
 
         for (i, (code, reason)) in CODES.iter().enumerate() {
@@ -64,7 +73,7 @@ impl EmergencyWatch {
             match self.fetch(code).await {
                 Ok(hexes) => {
                     for h in hexes {
-                        present.entry(h).or_insert(reason);
+                        present.entry(h).or_insert((code, reason));
                     }
                 }
                 Err(e) => {
@@ -79,7 +88,8 @@ impl EmergencyWatch {
         let now = now_ms();
         let mut seen = self.seen.lock();
 
-        for (hex, reason) in &present {
+        let record_history = self.settings.lock().history_enabled;
+        for (hex, (code, reason)) in &present {
             if !seen.contains_key(hex) {
                 let _ = app.emit(
                     "alert",
@@ -91,6 +101,18 @@ impl EmergencyWatch {
                         at: now,
                     },
                 );
+                if record_history {
+                    self.history.record(&[AircraftEvent {
+                        hex: hex.clone(),
+                        at: now,
+                        kind: EventKind::Emergency,
+                        flight: None,
+                        from: None,
+                        to: Some(code.to_string()),
+                        lat: None,
+                        lon: None,
+                    }]);
+                }
                 tracing::info!("emergency watch: {hex} {reason}");
             }
             seen.insert(hex.clone(), 0);

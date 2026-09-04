@@ -13,9 +13,10 @@ use tauri::{AppHandle, Emitter};
 use crate::alerts::Alerts;
 use crate::config::AppSettings;
 use crate::enrich::Enricher;
+use crate::history::History;
 use crate::ingest::{normalize, queries_for_area, AircraftSource};
 use crate::region::Area;
-use crate::state::LiveState;
+use crate::state::{AircraftEvent, EventKind, LiveState};
 use crate::util::now_ms;
 
 #[derive(Debug, Clone, Serialize)]
@@ -44,6 +45,7 @@ pub struct Poller {
     pub live: Arc<LiveState>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
+    pub history: Arc<History>,
     pub sources: Vec<Arc<dyn AircraftSource>>,
     pub settings: Arc<Mutex<AppSettings>>,
     pub viewport: Arc<Mutex<Option<Area>>>,
@@ -61,6 +63,7 @@ impl Poller {
         live: Arc<LiveState>,
         enricher: Arc<Enricher>,
         alerts: Arc<Alerts>,
+        history: Arc<History>,
         sources: Vec<Arc<dyn AircraftSource>>,
         settings: Arc<Mutex<AppSettings>>,
         viewport: Arc<Mutex<Option<Area>>>,
@@ -70,6 +73,7 @@ impl Poller {
             live,
             enricher,
             alerts,
+            history,
             sources,
             settings,
             viewport,
@@ -151,9 +155,32 @@ impl Poller {
                         self.enricher.fill_identity(ac);
                     }
                     let feed_total = list.len() as u64;
-                    let diff = self.live.ingest(list, feed_total, now);
+                    let mut diff = self.live.ingest(list, feed_total, now);
 
                     let alerts = self.alerts.evaluate(&diff);
+
+                    if self.settings.lock().history_enabled {
+                        let mut events = std::mem::take(&mut diff.events);
+                        for a in &alerts {
+                            events.push(AircraftEvent {
+                                hex: a.hex.clone(),
+                                at: a.at,
+                                kind: EventKind::Alert,
+                                flight: None,
+                                from: None,
+                                to: Some(a.reason.clone()),
+                                lat: None,
+                                lon: None,
+                            });
+                        }
+                        if !events.is_empty() {
+                            self.history.record(&events);
+                            for ev in &events {
+                                let _ = app.emit("aircraft-event", ev);
+                            }
+                        }
+                    }
+
                     let _ = app.emit("aircraft-diff", &diff);
                     for ev in alerts {
                         let _ = app.emit("alert", &ev);

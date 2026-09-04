@@ -7,6 +7,7 @@
   import ChartViewer from "./lib/charts/ChartViewer.svelte";
   import FiltersPanel from "./lib/filters/FiltersPanel.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
+  import EventsPanel from "./lib/history/EventsPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import AlertToast from "./lib/watchlist/AlertToast.svelte";
@@ -41,6 +42,7 @@
     | "filters"
     | "layers"
     | "watchlist"
+    | "events"
     | "settings";
 
   let panel: PanelId = "none";
@@ -131,6 +133,8 @@
       <LayersPanel onClose={close} />
     {:else if panel === "watchlist"}
       <WatchlistPanel onClose={close} />
+    {:else if panel === "events"}
+      <EventsPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
     {/if}

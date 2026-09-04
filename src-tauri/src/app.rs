@@ -15,6 +15,7 @@ use crate::db::Db;
 use crate::enrich::airports::Airports;
 use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
+use crate::history::History;
 use crate::ingest::AircraftSource;
 use crate::poller::SourceStatus;
 use crate::region::Area;
@@ -29,6 +30,7 @@ pub struct AppState {
     pub sources: Vec<Arc<dyn AircraftSource>>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
+    pub history: Arc<History>,
     pub tiles: Arc<TileCache>,
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,

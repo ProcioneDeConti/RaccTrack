@@ -85,6 +85,23 @@ CREATE TABLE IF NOT EXISTS chart_pdf (
     fetched_at INTEGER NOT NULL,
     last_used  INTEGER NOT NULL
 );
+
+-- Self-collected flight history: notable state changes for aircraft we've had
+-- in view (squawk / emergency / callsign / takeoff / landing) plus watch and
+-- NA-wide emergency-squawk hits. Pruned by age (history_retention_days).
+CREATE TABLE IF NOT EXISTS aircraft_events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    hex      TEXT NOT NULL,
+    at       INTEGER NOT NULL,
+    kind     TEXT NOT NULL,
+    flight   TEXT,
+    from_val TEXT,
+    to_val   TEXT,
+    lat      REAL,
+    lon      REAL
+);
+CREATE INDEX IF NOT EXISTS idx_events_at ON aircraft_events(at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_hex ON aircraft_events(hex, at DESC);
 "#;
 
 impl Db {

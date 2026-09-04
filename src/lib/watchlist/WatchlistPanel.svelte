@@ -7,14 +7,14 @@
     listPresets,
   } from "../api/backend";
   import type { WatchKind, Preset } from "../api/types";
-  import { watchEntries, alertLog, refreshWatch } from "./watchStore";
+  import { watchEntries, refreshWatch } from "./watchStore";
   import { selectedHex, visibleAircraft, flyTo } from "../state";
   import Icon from "../ui/Icon.svelte";
   import Panel from "../ui/Panel.svelte";
 
   export let onClose: () => void;
 
-  let tab: "list" | "presets" | "feed" | "log" = "list";
+  let tab: "list" | "presets" | "feed" = "list";
   let kind: WatchKind = "hex";
   let value = "";
   let label = "";
@@ -90,9 +90,6 @@
     <button class:active={tab === "feed"} on:click={() => (tab = "feed")}>
       Feed{#if feed.length} ({feed.length}){/if}
     </button>
-    <button class:active={tab === "log"} on:click={() => (tab = "log")}>
-      Alerts{#if $alertLog.length} ({$alertLog.length}){/if}
-    </button>
   </div>
 
   {#if tab === "list"}
@@ -156,19 +153,9 @@
         <li class="muted">No military / interesting aircraft in view.</li>
       {/each}
     </ul>
-  {:else}
-    <ul class="log">
-      {#each $alertLog as a}
-        <li class:emg={a.emergency}>
-          <button class="link" on:click={() => selectedHex.set(a.hex)}>{a.hex}</button>
-          <span>{a.reason}</span>
-          <time>{new Date(a.at).toLocaleTimeString()}</time>
-        </li>
-      {:else}
-        <li class="muted">No alerts yet.</li>
-      {/each}
-    </ul>
   {/if}
+
+  <p class="hint">Past alerts now live in the Events &amp; history panel.</p>
 </Panel>
 
 <style>
@@ -254,16 +241,6 @@
     color: #7ee2b8;
     letter-spacing: 0.03em;
   }
-  .log li {
-    flex-wrap: wrap;
-  }
-  .log time {
-    margin-left: auto;
-    color: var(--text-dim);
-  }
-  .log li.emg .link {
-    color: var(--emergency);
-  }
   .link {
     border: none;
     background: transparent;
@@ -272,6 +249,11 @@
     font-family: ui-monospace, monospace;
   }
   .muted {
+    color: var(--text-dim);
+  }
+  .hint {
+    margin: 10px 0 0;
+    font-size: 10px;
     color: var(--text-dim);
   }
 </style>
