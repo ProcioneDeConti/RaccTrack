@@ -708,6 +708,7 @@
     unsubAircraft?.();
     unsubHover?.();
     unsubRoute?.();
+    overlays?.destroy();
     homeMarker?.remove();
     map?.remove();
   });
@@ -784,5 +785,21 @@
   }
   :global(.home-marker svg) {
     display: block;
+  }
+  /* Geofence disc: a DOM circle so it never culls when its centre leaves view.
+     maplibre positions the marker at the centre; we size it in px on zoom. */
+  :global(.geofence-disc) {
+    border-radius: 50%;
+    pointer-events: none;
+    box-sizing: border-box;
+    border: 2.6px solid #ffd23f;
+    background: rgba(255, 210, 63, 0.16);
+    box-shadow:
+      0 0 0 2px rgba(13, 17, 23, 0.55),
+      inset 0 0 0 2px rgba(13, 17, 23, 0.55);
+  }
+  :global(.geofence-disc[data-enabled="false"]) {
+    border-color: #b0b4ba;
+    background: rgba(138, 138, 138, 0.06);
   }
 </style>
