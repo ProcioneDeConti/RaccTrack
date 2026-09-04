@@ -17,6 +17,7 @@
   import { BASEMAP_THEMES } from "../map/style";
   import { clipToRegion, type Bbox } from "../map/region";
   import Icon from "../ui/Icon.svelte";
+  import Panel from "../ui/Panel.svelte";
 
   export let onClose: () => void;
   export let currentBbox: () => Bbox | null;
@@ -117,12 +118,8 @@
   }
 </script>
 
-<aside class="panel">
-  <header>
-    <h3>Settings</h3>
-    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
-  </header>
-
+<Panel title="Settings" {onClose} width={320}>
+ <div class="stack">
   {#if s}
     <label class="row">
       Poll interval
@@ -275,41 +272,14 @@
     {/if}
 
   {/if}
-</aside>
+ </div>
+</Panel>
 
 <style>
-  .panel {
-    position: absolute;
-    top: 14px;
-    left: 52px;
-    width: 320px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    z-index: 11;
+  .stack {
     display: flex;
     flex-direction: column;
     gap: 8px;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  h3 {
-    margin: 0;
-    font-size: 14px;
-  }
-  .close {
-    border: none;
-    background: transparent;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-dim);
-  }
-  .close:hover {
-    color: var(--text);
   }
   .hl {
     display: inline-flex;

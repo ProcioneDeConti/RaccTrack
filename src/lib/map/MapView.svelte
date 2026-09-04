@@ -564,6 +564,9 @@
         customAttribution: [DATA_ATTRIBUTION, BASEMAP_ATTRIBUTION],
       }),
     );
+    // Nav + scale stay on the left but are nudged clear of the panel rail in
+    // app.css. A left-docked panel, when open, sits over them — acceptable
+    // since the right side is reserved for the selection detail panel.
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "top-left");
     map.addControl(new maplibregl.ScaleControl({ unit: "nautical" }), "bottom-left");
 

@@ -11,6 +11,8 @@
      caution tape) live in src/lib/theme/colors.ts — map layers and canvas
      markers can't read CSS vars. --accent / --emergency are mirrored there. */
 
+  --rail-w: 46px;
+
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
@@ -70,6 +72,12 @@ select {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 6px;
+}
+
+/* Keep the left-anchored map controls clear of the panel rail. */
+.maplibregl-ctrl-top-left,
+.maplibregl-ctrl-bottom-left {
+  margin-left: var(--rail-w);
 }
 
 /* MapLibre popups — match the dark app theme (default is white). */

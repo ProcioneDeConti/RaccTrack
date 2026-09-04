@@ -2,10 +2,10 @@
   import { layers, home } from "../state";
   import { updateSettings } from "../api/backend";
   import type { MapLayers } from "../api/types";
-  import Icon from "../ui/Icon.svelte";
+  import Panel from "../ui/Panel.svelte";
   import { AIRSPACE_STYLE, FLIGHT_CATEGORY_COLORS } from "../theme/colors";
 
-  let open = false;
+  export let onClose: () => void;
 
   function toggle(key: keyof MapLayers) {
     layers.update((l) => {
@@ -16,7 +16,6 @@
   }
 
   $: l = $layers;
-  $: anyOn = l.airports || l.weather || l.airspace || l.rangeRings;
 
   // `color` is pulled from the shared theme palette (src/lib/theme/colors.ts);
   // only the label/tooltip copy lives here.
@@ -99,90 +98,58 @@
   ];
 </script>
 
-<div class="layers">
-  <button class="mapbtn" class:active={anyOn} on:click={() => (open = !open)} title="Map layers">
-    <Icon name="layers" size={14} />
-    Layers
-  </button>
-  {#if open}
-    <div class="menu">
-      <label><input type="checkbox" checked={l.airports} on:change={() => toggle("airports")} /> Airports</label>
-      <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
-      <label><input type="checkbox" checked={l.airspace} on:change={() => toggle("airspace")} /> Airspace</label>
-      <label
-        class:disabled={!$home}
-        title={$home ? "" : "Set a home location first"}
-      >
-        <input
-          type="checkbox"
-          checked={l.rangeRings}
-          disabled={!$home}
-          on:change={() => toggle("rangeRings")}
-        /> Range rings
-      </label>
+<Panel title="Map layers" {onClose} width={230}>
+  <label><input type="checkbox" checked={l.airports} on:change={() => toggle("airports")} /> Airports</label>
+  <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
+  <label><input type="checkbox" checked={l.airspace} on:change={() => toggle("airspace")} /> Airspace</label>
+  <label class:disabled={!$home} title={$home ? "" : "Set a home location first"}>
+    <input
+      type="checkbox"
+      checked={l.rangeRings}
+      disabled={!$home}
+      on:change={() => toggle("rangeRings")}
+    /> Range rings
+  </label>
 
-      {#if l.weather}
-        <div class="legend">
-          <div class="lh">Flight category (hover for detail)</div>
-          {#each WX_LEGEND as x}
-            <div class="lrow" title={x.tip}>
-              <span class="sw" style="background:{x.color}"></span>
-              <b>{x.abbr}</b><span class="ex">{x.name}</span>
-            </div>
-          {/each}
+  {#if l.weather}
+    <div class="legend">
+      <div class="lh">Flight category (hover for detail)</div>
+      {#each WX_LEGEND as x}
+        <div class="lrow" title={x.tip}>
+          <span class="sw" style="background:{x.color}"></span>
+          <b>{x.abbr}</b><span class="ex">{x.name}</span>
         </div>
-      {/if}
-      {#if l.airspace}
-        <div class="legend">
-          <div class="lh">Airspace (hover for detail)</div>
-          {#each AS_LEGEND as x}
-            <div class="lrow" title={x.tip}>
-              <span class="sw" style="background:{x.color}"></span>
-              <b>{x.abbr}</b><span class="ex">{x.name}</span>
-            </div>
-          {/each}
-        </div>
-      {/if}
+      {/each}
     </div>
   {/if}
-</div>
+  {#if l.airspace}
+    <div class="legend">
+      <div class="lh">Airspace (hover for detail)</div>
+      {#each AS_LEGEND as x}
+        <div class="lrow" title={x.tip}>
+          <span class="sw" style="background:{x.color}"></span>
+          <b>{x.abbr}</b><span class="ex">{x.name}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
+</Panel>
 
 <style>
-  .layers {
-    position: absolute;
-    top: 14px;
-    left: 150px;
-    z-index: 10;
-  }
-  .mapbtn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .menu {
-    margin-top: 6px;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-width: 170px;
-  }
   label {
     font-size: 12px;
     display: flex;
     align-items: center;
     gap: 6px;
+    margin: 5px 0;
   }
   label.disabled {
     opacity: 0.5;
   }
   .legend {
     border-top: 1px solid var(--border);
-    padding-top: 5px;
-    margin-top: 2px;
+    padding-top: 6px;
+    margin-top: 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -192,7 +159,7 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--text-dim);
-    margin-bottom: 1px;
+    margin-bottom: 2px;
   }
   .lrow {
     display: flex;

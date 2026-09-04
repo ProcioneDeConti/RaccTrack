@@ -13,6 +13,7 @@
   import { altitude, speed } from "../format";
   import { distanceNm, fmtDistanceNm } from "../geo";
   import Icon from "../ui/Icon.svelte";
+  import Panel from "../ui/Panel.svelte";
 
   export let onClose: () => void;
 
@@ -83,12 +84,7 @@
   }
 </script>
 
-<aside class="list">
-  <header>
-    <span>{rows.length} in view</span>
-    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
-  </header>
-  <div class="scroll">
+<Panel title="{rows.length} in view" {onClose} width={340} bodyPad={false}>
     <table>
       <thead>
         <tr>
@@ -143,47 +139,9 @@
     {#if rows.length === 0}
       <p class="empty">No aircraft in view.</p>
     {/if}
-  </div>
-</aside>
+</Panel>
 
 <style>
-  .list {
-    position: absolute;
-    top: 52px;
-    left: 14px;
-    bottom: 14px;
-    width: 340px;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    z-index: 11;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 10px;
-    font-size: 12px;
-    color: var(--text-dim);
-    border-bottom: 1px solid var(--border);
-  }
-  .close {
-    border: none;
-    background: transparent;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-dim);
-  }
-  .close:hover {
-    color: var(--text);
-  }
-  .scroll {
-    overflow-y: auto;
-    flex: 1;
-  }
   table {
     width: 100%;
     border-collapse: collapse;
@@ -273,8 +231,7 @@
     color: var(--accent);
     opacity: 1;
   }
-  .empty,
-  .list :global(p.empty) {
+  .empty {
     padding: 16px;
     text-align: center;
     color: var(--text-dim);

@@ -2,10 +2,10 @@
   import { onMount } from "svelte";
   import MapView from "./lib/map/MapView.svelte";
   import DetailPanel from "./lib/panel/DetailPanel.svelte";
-  import LayersControl from "./lib/map/LayersControl.svelte";
+  import LayersPanel from "./lib/map/LayersPanel.svelte";
   import AirportPanel from "./lib/map/AirportPanel.svelte";
   import ChartViewer from "./lib/charts/ChartViewer.svelte";
-  import FilterBar from "./lib/filters/FilterBar.svelte";
+  import FiltersPanel from "./lib/filters/FiltersPanel.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
@@ -13,14 +13,12 @@
   import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
   import SearchBox from "./lib/search/SearchBox.svelte";
   import PinnedBar from "./lib/panel/PinnedBar.svelte";
+  import Rail from "./lib/ui/Rail.svelte";
   import {
     applyDiff,
     resetAircraft,
     sourceStatus,
-    home,
-    goHomeSignal,
     pinned,
-    visibleAircraft,
     emergencyCount,
   } from "./lib/state";
   import {
@@ -36,16 +34,28 @@
   import { units } from "./lib/format";
   import type { Bbox } from "./lib/map/region";
   import iconUrl from "./assets/icon.png";
-  import Icon from "./lib/ui/Icon.svelte";
 
-  let panel: "none" | "watchlist" | "settings" = "none";
-  let showList = false;
+  type PanelId =
+    | "none"
+    | "list"
+    | "filters"
+    | "layers"
+    | "watchlist"
+    | "settings";
+
+  let panel: PanelId = "none";
   let notificationsEnabled = true;
   let mapView: MapView;
 
   function currentBbox(): Bbox | null {
     return mapView?.currentBounds?.() ?? null;
   }
+
+  function select(e: CustomEvent<string>) {
+    const id = e.detail as PanelId;
+    panel = panel === id ? "none" : id;
+  }
+  const close = () => (panel = "none");
 
   onMount(() => {
     const unlisteners: Array<Promise<() => void>> = [];
@@ -98,65 +108,33 @@
       /* notifications unavailable */
     }
   }
-
-  function toggle(p: "watchlist" | "settings") {
-    panel = panel === p ? "none" : p;
-    if (panel !== "none") showList = false;
-  }
-  $: if (showList) panel = "none";
 </script>
 
 <main>
   <div class="toolbar">
-    <div class="brand"><img src={iconUrl} alt="" /> RaccTrack <span class="sub">(ADS-B)</span></div>
+    <div class="brand">
+      <img src={iconUrl} alt="" /> RaccTrack <span class="sub">(ADS-B)</span>
+    </div>
     <SearchBox />
-    <button class="labeled" class:active={showList} on:click={() => (showList = !showList)}>
-      <Icon name="list" />
-      List{#if $visibleAircraft.length} ({$visibleAircraft.length}){/if}
-    </button>
-    <button
-      class="labeled"
-      class:active={panel === "watchlist"}
-      on:click={() => toggle("watchlist")}
-    >
-      <Icon name="star" />
-      Watchlist
-    </button>
-
-    <span class="spacer"></span>
-
-    <button
-      class="icon-btn"
-      title={$home ? `Go to home — ${$home.label}` : "Set a home location in Settings"}
-      aria-label={$home ? `Go to home — ${$home.label}` : "Home (set a location in Settings)"}
-      disabled={!$home}
-      on:click={() => goHomeSignal.update((n) => n + 1)}
-    >
-      <Icon name="home" size={17} />
-    </button>
-    <button
-      class="icon-btn"
-      class:active={panel === "settings"}
-      title="Settings"
-      aria-label="Settings"
-      on:click={() => toggle("settings")}
-    >
-      <Icon name="settings" size={17} />
-    </button>
   </div>
 
   <div class="stage">
     <MapView bind:this={mapView} />
-    <FilterBar />
-    <LayersControl />
-    {#if showList}
-      <AircraftList onClose={() => (showList = false)} />
-    {/if}
-    {#if panel === "watchlist"}
-      <WatchlistPanel onClose={() => (panel = "none")} />
+
+    <Rail active={panel} on:select={select} />
+
+    {#if panel === "list"}
+      <AircraftList onClose={close} />
+    {:else if panel === "filters"}
+      <FiltersPanel onClose={close} />
+    {:else if panel === "layers"}
+      <LayersPanel onClose={close} />
+    {:else if panel === "watchlist"}
+      <WatchlistPanel onClose={close} />
     {:else if panel === "settings"}
-      <SettingsPanel onClose={() => (panel = "none")} {currentBbox} />
+      <SettingsPanel onClose={close} {currentBbox} />
     {/if}
+
     <DetailPanel />
     <AirportPanel />
     <ChartViewer />
@@ -176,14 +154,13 @@
     height: 40px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 0 12px;
     background: var(--bg-panel);
     border-bottom: 1px solid var(--border);
   }
   .brand {
     font-weight: 700;
-    margin-right: 8px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -196,31 +173,6 @@
   .brand .sub {
     font-weight: 400;
     color: var(--text-dim);
-  }
-  .spacer {
-    flex: 1 1 auto;
-  }
-  button.labeled {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  button.icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 5px;
-    color: var(--text-dim);
-  }
-  button.icon-btn:hover:not(:disabled) {
-    color: var(--text);
-  }
-  button.icon-btn.active {
-    color: #fff;
-  }
-  button.icon-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
   .stage {
     position: relative;

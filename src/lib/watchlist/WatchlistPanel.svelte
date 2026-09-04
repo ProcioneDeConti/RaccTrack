@@ -10,6 +10,7 @@
   import { watchEntries, alertLog, refreshWatch } from "./watchStore";
   import { selectedHex, visibleAircraft, flyTo } from "../state";
   import Icon from "../ui/Icon.svelte";
+  import Panel from "../ui/Panel.svelte";
 
   export let onClose: () => void;
 
@@ -82,20 +83,17 @@
   }
 </script>
 
-<aside class="panel">
-  <header>
-    <div class="tabs">
-      <button class:active={tab === "list"} on:click={() => (tab = "list")}>Watch</button>
-      <button class:active={tab === "presets"} on:click={() => (tab = "presets")}>Presets</button>
-      <button class:active={tab === "feed"} on:click={() => (tab = "feed")}>
-        Feed{#if feed.length} ({feed.length}){/if}
-      </button>
-      <button class:active={tab === "log"} on:click={() => (tab = "log")}>
-        Alerts{#if $alertLog.length} ({$alertLog.length}){/if}
-      </button>
-    </div>
-    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
-  </header>
+<Panel title="Watchlist" {onClose} width={340}>
+  <div class="tabs">
+    <button class:active={tab === "list"} on:click={() => (tab = "list")}>Watch</button>
+    <button class:active={tab === "presets"} on:click={() => (tab = "presets")}>Presets</button>
+    <button class:active={tab === "feed"} on:click={() => (tab = "feed")}>
+      Feed{#if feed.length} ({feed.length}){/if}
+    </button>
+    <button class:active={tab === "log"} on:click={() => (tab = "log")}>
+      Alerts{#if $alertLog.length} ({$alertLog.length}){/if}
+    </button>
+  </div>
 
   {#if tab === "list"}
     <form class="add" on:submit|preventDefault={add}>
@@ -171,46 +169,18 @@
       {/each}
     </ul>
   {/if}
-</aside>
+</Panel>
 
 <style>
-  .panel {
-    position: absolute;
-    top: 14px;
-    left: 52px;
-    width: 340px;
-    max-height: 74vh;
-    overflow-y: auto;
-    background: var(--bg-panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    z-index: 11;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-  }
   .tabs {
     display: flex;
     gap: 3px;
     flex-wrap: wrap;
+    margin-bottom: 10px;
   }
   .tabs button {
     font-size: 11px;
     padding: 3px 7px;
-  }
-  .close {
-    border: none;
-    background: transparent;
-    display: inline-flex;
-    align-items: center;
-    color: var(--text-dim);
-  }
-  .close:hover {
-    color: var(--text);
   }
   .add {
     display: grid;
