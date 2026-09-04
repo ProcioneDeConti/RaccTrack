@@ -145,6 +145,68 @@ pub fn clear_history(state: State<AppState>) -> CmdResult<()> {
     state.history.clear().map_err(err)
 }
 
+// --- spotter logbook ---
+
+#[tauri::command]
+pub fn logbook(
+    state: State<AppState>,
+    sort: String,
+    search: String,
+    limit: Option<i64>,
+) -> CmdResult<Vec<crate::logbook::Sighting>> {
+    state
+        .logbook
+        .list(&sort, &search, limit.unwrap_or(1000).clamp(1, 20_000))
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn sighting(
+    state: State<AppState>,
+    hex: String,
+) -> CmdResult<Option<crate::logbook::Sighting>> {
+    state.logbook.get(&hex.to_lowercase()).map_err(err)
+}
+
+#[tauri::command]
+pub fn set_sighting_note(state: State<AppState>, hex: String, note: String) -> CmdResult<()> {
+    state.logbook.set_note(&hex.to_lowercase(), &note).map_err(err)
+}
+
+#[tauri::command]
+pub fn delete_sighting(state: State<AppState>, hex: String) -> CmdResult<()> {
+    state.logbook.delete(&hex.to_lowercase()).map_err(err)
+}
+
+#[tauri::command]
+pub fn clear_logbook(state: State<AppState>) -> CmdResult<()> {
+    state.logbook.clear().map_err(err)
+}
+
+#[tauri::command]
+pub fn logbook_count(state: State<AppState>) -> CmdResult<i64> {
+    state.logbook.count().map_err(err)
+}
+
+/// Write the whole logbook to a CSV in the OS Downloads folder; returns its path.
+#[tauri::command]
+pub fn export_logbook(app: AppHandle, state: State<AppState>) -> CmdResult<String> {
+    use tauri::Manager;
+    let csv = state.logbook.export_csv().map_err(err)?;
+    let dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().document_dir())
+        .map_err(err)?;
+    let name = format!(
+        "racctrack-logbook-{}.csv",
+        &crate::logbook::chrono_iso(now_ms())[..10]
+    );
+    let path = dir.join(name);
+    std::fs::write(&path, csv).map_err(err)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn get_all_trails(state: State<AppState>) -> HashMap<String, Vec<TrailPoint>> {
     state.live.all_trails()

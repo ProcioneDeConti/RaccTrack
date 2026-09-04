@@ -102,6 +102,22 @@ CREATE TABLE IF NOT EXISTS aircraft_events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_at ON aircraft_events(at DESC);
 CREATE INDEX IF NOT EXISTS idx_events_hex ON aircraft_events(hex, at DESC);
+
+-- Spotter logbook: one row per airframe the user has had in view, ever.
+-- `count` is distinct appearances (a gap of > 1 h starts a new one).
+CREATE TABLE IF NOT EXISTS sightings (
+    hex          TEXT PRIMARY KEY,
+    first_seen   INTEGER NOT NULL,
+    last_seen    INTEGER NOT NULL,
+    count        INTEGER NOT NULL DEFAULT 1,
+    flight       TEXT,
+    registration TEXT,
+    type_code    TEXT,
+    description  TEXT,
+    military     INTEGER NOT NULL DEFAULT 0,
+    note         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sightings_last ON sightings(last_seen DESC);
 "#;
 
 impl Db {

@@ -17,6 +17,7 @@ use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
 use crate::history::History;
 use crate::ingest::AircraftSource;
+use crate::logbook::Logbook;
 use crate::poller::SourceStatus;
 use crate::region::Area;
 use crate::state::LiveState;
@@ -31,6 +32,7 @@ pub struct AppState {
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,
+    pub logbook: Arc<Logbook>,
     pub tiles: Arc<TileCache>,
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,

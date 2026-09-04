@@ -48,6 +48,8 @@ pub struct AppSettings {
     pub history_enabled: bool,
     #[serde(default = "default_history_days")]
     pub history_retention_days: u32,
+    #[serde(default = "default_true")]
+    pub logbook_enabled: bool,
     pub tile_cache_enabled: bool,
     pub tile_cache_max_mb: u64,
     pub units: String, // "imperial" | "metric"
@@ -101,6 +103,7 @@ impl Default for AppSettings {
             emergency_watch_enabled: true,
             history_enabled: true,
             history_retention_days: 30,
+            logbook_enabled: true,
             tile_cache_enabled: false,
             tile_cache_max_mb: 500,
             units: "imperial".into(),

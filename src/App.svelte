@@ -8,6 +8,7 @@
   import FiltersPanel from "./lib/filters/FiltersPanel.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import EventsPanel from "./lib/history/EventsPanel.svelte";
+  import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import AboutPanel from "./lib/about/AboutPanel.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
@@ -44,6 +45,7 @@
     | "layers"
     | "watchlist"
     | "events"
+    | "logbook"
     | "settings"
     | "about";
 
@@ -137,6 +139,8 @@
       <WatchlistPanel onClose={close} />
     {:else if panel === "events"}
       <EventsPanel onClose={close} />
+    {:else if panel === "logbook"}
+      <LogbookPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
     {:else if panel === "about"}

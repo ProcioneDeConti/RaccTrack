@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { aircraftHistory, onAircraftEvent } from "../api/backend";
-  import type { AircraftEvent } from "../api/types";
+  import {
+    aircraftHistory,
+    onAircraftEvent,
+    sighting,
+    setSightingNote,
+  } from "../api/backend";
+  import type { AircraftEvent, Sighting } from "../api/types";
   import Icon from "../ui/Icon.svelte";
   import Message from "../ui/Message.svelte";
   import { eventIcon, eventText, eventTime, eventIsUrgent } from "./events";
@@ -9,6 +14,8 @@
   export let hex: string;
 
   let events: AircraftEvent[] = [];
+  let seen: Sighting | null = null;
+  let note = "";
   let loading = false;
   let loadedFor: string | null = null;
 
@@ -18,14 +25,29 @@
     loading = true;
     loadedFor = h;
     try {
-      const rows = await aircraftHistory(h);
-      if (loadedFor === h) events = rows;
+      const [rows, s] = await Promise.all([aircraftHistory(h), sighting(h)]);
+      if (loadedFor === h) {
+        events = rows;
+        seen = s;
+        note = s?.note ?? "";
+      }
     } catch {
-      if (loadedFor === h) events = [];
+      if (loadedFor === h) {
+        events = [];
+        seen = null;
+      }
     } finally {
       loading = false;
     }
   }
+
+  async function saveNote() {
+    if (!hex) return;
+    await setSightingNote(hex, note);
+  }
+
+  const dayFmt = (ms: number) =>
+    new Date(ms).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
 
   const stop = onAircraftEvent((e) => {
     if (e.hex === hex) events = [e, ...events].slice(0, 200);
@@ -34,7 +56,24 @@
 </script>
 
 <section class="panel-section">
-  <h4>History</h4>
+  <h4>History &amp; logbook</h4>
+
+  {#if seen}
+    <p class="seen">
+      Seen <b>{seen.count}×</b> · first {dayFmt(seen.firstSeen)}
+    </p>
+  {/if}
+  {#if seen}
+    <input
+      class="note"
+      type="text"
+      placeholder="Add a note…"
+      bind:value={note}
+      on:change={saveNote}
+      on:blur={saveNote}
+    />
+  {/if}
+
   {#if loading && events.length === 0}
     <Message kind="loading">Loading…</Message>
   {:else if events.length === 0}
@@ -56,6 +95,16 @@
 </section>
 
 <style>
+  .seen {
+    margin: 0 0 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .note {
+    width: 100%;
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
   ul {
     list-style: none;
     margin: 0;

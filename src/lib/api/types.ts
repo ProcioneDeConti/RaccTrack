@@ -244,6 +244,19 @@ export interface AircraftEvent {
   lon: number | null;
 }
 
+export interface Sighting {
+  hex: string;
+  firstSeen: number;
+  lastSeen: number;
+  count: number;
+  flight: string | null;
+  registration: string | null;
+  typeCode: string | null;
+  description: string | null;
+  military: boolean;
+  note: string | null;
+}
+
 export type WatchKind =
   | "hex"
   | "registration"
@@ -297,6 +310,7 @@ export interface AppSettings {
   emergencyWatchEnabled: boolean;
   historyEnabled: boolean;
   historyRetentionDays: number;
+  logbookEnabled: boolean;
   tileCacheEnabled: boolean;
   tileCacheMaxMb: number;
   units: "imperial" | "metric";

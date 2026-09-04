@@ -46,6 +46,7 @@ pub struct Poller {
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,
+    pub logbook: Arc<crate::logbook::Logbook>,
     pub sources: Vec<Arc<dyn AircraftSource>>,
     pub settings: Arc<Mutex<AppSettings>>,
     pub viewport: Arc<Mutex<Option<Area>>>,
@@ -64,6 +65,7 @@ impl Poller {
         enricher: Arc<Enricher>,
         alerts: Arc<Alerts>,
         history: Arc<History>,
+        logbook: Arc<crate::logbook::Logbook>,
         sources: Vec<Arc<dyn AircraftSource>>,
         settings: Arc<Mutex<AppSettings>>,
         viewport: Arc<Mutex<Option<Area>>>,
@@ -74,6 +76,7 @@ impl Poller {
             enricher,
             alerts,
             history,
+            logbook,
             sources,
             settings,
             viewport,
@@ -172,6 +175,10 @@ impl Poller {
                     }
                     let feed_total = list.len() as u64;
                     let mut diff = self.live.ingest(list, feed_total, now);
+
+                    if self.settings.lock().logbook_enabled && !diff.added.is_empty() {
+                        self.logbook.record(&diff.added, now);
+                    }
 
                     let alerts = self.alerts.evaluate(&diff);
 

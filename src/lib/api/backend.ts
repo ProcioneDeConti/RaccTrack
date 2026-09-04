@@ -8,6 +8,7 @@ import type {
   AppSettings,
   GeoResult,
   LocalReceiverProbe,
+  Sighting,
   SourceStatus,
   TrailPoint,
   WatchEntry,
@@ -42,6 +43,38 @@ export function recentEvents(limit?: number): Promise<AircraftEvent[]> {
 
 export function clearHistory(): Promise<void> {
   return invoke("clear_history");
+}
+
+export function logbook(
+  sort: "last" | "first" | "count" | "reg",
+  search: string,
+  limit?: number,
+): Promise<Sighting[]> {
+  return invoke("logbook", { sort, search, limit });
+}
+
+export function sighting(hex: string): Promise<Sighting | null> {
+  return invoke("sighting", { hex });
+}
+
+export function setSightingNote(hex: string, note: string): Promise<void> {
+  return invoke("set_sighting_note", { hex, note });
+}
+
+export function deleteSighting(hex: string): Promise<void> {
+  return invoke("delete_sighting", { hex });
+}
+
+export function clearLogbook(): Promise<void> {
+  return invoke("clear_logbook");
+}
+
+export function logbookCount(): Promise<number> {
+  return invoke("logbook_count");
+}
+
+export function exportLogbook(): Promise<string> {
+  return invoke("export_logbook");
 }
 
 export function testLocalReceiver(url: string): Promise<LocalReceiverProbe> {

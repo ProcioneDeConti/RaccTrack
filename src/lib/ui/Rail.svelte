@@ -36,6 +36,7 @@
     { id: "layers", icon: "layers", label: "Map layers", dot: layersOn },
     { id: "watchlist", icon: "star", label: "Watchlist" },
     { id: "events", icon: "activity", label: "Events & history" },
+    { id: "logbook", icon: "book", label: "Spotter logbook" },
   ] satisfies Item[];
 </script>
 

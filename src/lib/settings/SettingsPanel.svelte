@@ -9,6 +9,8 @@
     geocode,
     onDownloadProgress,
     clearHistory,
+    clearLogbook,
+    exportLogbook,
     testLocalReceiver,
     type TileCacheStats,
     type DownloadProgress,
@@ -109,6 +111,14 @@
 
   async function wipeHistory() {
     if (confirm("Delete all recorded flight history?")) await clearHistory();
+  }
+
+  let logbookExported: string | null = null;
+  async function doExportLogbook() {
+    logbookExported = await exportLogbook();
+  }
+  async function wipeLogbook() {
+    if (confirm("Delete the entire spotter logbook?")) await clearLogbook();
   }
 
   async function downloadHere() {
@@ -320,6 +330,27 @@
         <span class="muted">Recorded events</span>
         <button on:click={wipeHistory}>Clear history</button>
       </div>
+    {/if}
+
+    <label class="row">
+      <span>Spotter logbook (every airframe seen)</span>
+      <input
+        type="checkbox"
+        checked={s.logbookEnabled}
+        on:change={(e) => patch({ logbookEnabled: e.currentTarget.checked })}
+      />
+    </label>
+    {#if s.logbookEnabled}
+      <div class="row">
+        <span class="muted">Logbook</span>
+        <span class="btns">
+          <button on:click={doExportLogbook}>Export CSV</button>
+          <button on:click={wipeLogbook}>Clear</button>
+        </span>
+      </div>
+      {#if logbookExported}
+        <p class="muted">Saved → {logbookExported}</p>
+      {/if}
     {/if}
 
     <hr />

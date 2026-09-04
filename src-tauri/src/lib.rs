@@ -11,6 +11,7 @@ mod enrich;
 mod geocode;
 mod history;
 mod ingest;
+mod logbook;
 mod notable;
 mod poller;
 mod region;
@@ -136,6 +137,7 @@ pub fn run() {
             ));
 
             let alerts = Arc::new(Alerts::new(db.clone()));
+            let logbook = Arc::new(crate::logbook::Logbook::new(db.clone()));
             let history = Arc::new(crate::history::History::new(db.clone()));
             {
                 // Drop events past the retention window on startup.
@@ -174,6 +176,7 @@ pub fn run() {
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
                 history: history.clone(),
+                logbook: logbook.clone(),
                 tiles: tiles.clone(),
                 geocoder: geocoder.clone(),
                 weather: weather.clone(),
@@ -195,7 +198,8 @@ pub fn run() {
             tauri::async_runtime::spawn(ewatch.run(handle.clone()));
 
             let poller = Arc::new(Poller::new(
-                live, enricher, alerts, history, sources, settings, viewport, status,
+                live, enricher, alerts, history, logbook, sources, settings, viewport,
+                status,
             ));
             tauri::async_runtime::spawn(poller.run(handle));
 
@@ -210,6 +214,13 @@ pub fn run() {
             commands::aircraft_history,
             commands::recent_events,
             commands::clear_history,
+            commands::logbook,
+            commands::sighting,
+            commands::set_sighting_note,
+            commands::delete_sighting,
+            commands::clear_logbook,
+            commands::logbook_count,
+            commands::export_logbook,
             commands::test_local_receiver,
             commands::get_source_status,
             commands::log_frontend,
