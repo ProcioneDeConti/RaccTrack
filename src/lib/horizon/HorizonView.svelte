@@ -255,7 +255,7 @@
 <style>
   .horizon {
     position: absolute;
-    left: 0;
+    left: var(--rail-w);
     right: 0;
     bottom: 0;
     z-index: 8;
