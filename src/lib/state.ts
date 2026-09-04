@@ -177,6 +177,10 @@ export const aircraftGeoJson = derived(
   },
 );
 
+/** Count of aircraft actually drawn on the map (positioned + filter-matched).
+ *  Derived from the geojson feed so the status bar doesn't re-scan every diff. */
+export const shownCount = derived(aircraftGeoJson, ($g) => $g.features.length);
+
 export function selectedAircraft(): Aircraft | null {
   const hex = get(selectedHex);
   if (!hex) return null;

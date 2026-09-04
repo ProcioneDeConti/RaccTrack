@@ -7,6 +7,21 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [svelte()],
 
+  build: {
+    // maplibre-gl alone is ~730 kB; nothing to be done about that, so don't
+    // warn on it.
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        // Split maplibre out so the app chunk stays small and cacheable apart
+        // from vendor code that changes rarely.
+        manualChunks(id) {
+          if (id.includes("node_modules/maplibre-gl")) return "maplibre";
+        },
+      },
+    },
+  },
+
   // Tauri expects a fixed port, fail if that port is not available
   clearScreen: false,
   server: {

@@ -1,22 +1,20 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import {
     total,
     lastUpdate,
     sourceStatus,
-    aircraft,
+    shownCount,
     emergencyCount,
   } from "./state";
+  import Icon from "./ui/Icon.svelte";
 
   let ageStr = "—";
   const tick = setInterval(() => {
     const t = $lastUpdate;
     ageStr = t ? `${Math.max(0, Math.round((Date.now() - t) / 1000))}s ago` : "—";
   }, 1000);
-  import { onDestroy } from "svelte";
-  import Icon from "./ui/Icon.svelte";
   onDestroy(() => clearInterval(tick));
-
-  $: withPos = [...$aircraft.values()].filter((a) => a.lat !== null).length;
 </script>
 
 <footer class="statusbar">
@@ -25,7 +23,7 @@
     {$sourceStatus?.activeSource ?? "connecting…"}
     {#if $sourceStatus && !$sourceStatus.healthy}(degraded){/if}
   </span>
-  <span>{withPos} shown / {$total} in feed</span>
+  <span>{$shownCount} shown / {$total} in feed</span>
   <span>updated {ageStr}</span>
   {#if $sourceStatus}
     <span class="muted">{$sourceStatus.requestsLastMinute} req/min</span>
