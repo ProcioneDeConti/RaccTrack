@@ -19,6 +19,9 @@
   const RIBBON_H = 20;
   const WIN_H = 130;
   const PAD = 8;
+  /** Degrees of arc the compass ribbon spans — a zoomed-out view of the window.
+   *  Bodies further round than half this just scroll off; drag to bring them in. */
+  const RIBBON_ARC = 260;
 
   let width = 720;
 
@@ -61,9 +64,9 @@
 
   const SUN_RAYS = [0, 45, 90, 135, 180, 225, 270, 315];
 
-  /** Ribbon x for an azimuth (the ribbon always spans the full 360°). */
+  /** Ribbon x for an azimuth, or null once it scrolls past the ribbon's arc. */
   const ribbonX = (azimuth: number) =>
-    width / 2 + (bearingDelta(azimuth, center) / 360) * width;
+    bearingToX(azimuth, center, width, RIBBON_ARC);
 
   /** SVG path for the Moon's lit portion, radius `r`, illuminated fraction `k`,
    *  lit limb on the right when `litRight`. Centred on the origin. */
@@ -80,18 +83,25 @@
     $horizonBodies != null &&
     bearingDelta($horizonBodies.sun.azimuth, $horizonBodies.moon.azimuth) > 0;
 
-  // window azimuth ticks: every 15°, spanning a little past the edges
-  $: winTicks = (() => {
+  /** Azimuth ticks every 15° across an arc `arcDeg` wide, centred on the view. */
+  function ticksFor(arcDeg: number, c: number, w: number) {
     const out: { b: number; x: number; label: string | null }[] = [];
-    const from = Math.floor((center - HORIZON_FOV / 2 - 15) / 15) * 15;
-    for (let b = from; b <= center + HORIZON_FOV / 2 + 15; b += 15) {
-      const x = bearingToX(wrap360(b), center, width);
+    const half = arcDeg / 2;
+    const from = Math.floor((c - half - 15) / 15) * 15;
+    for (let b = from; b <= c + half + 15; b += 15) {
+      const x = bearingToX(wrap360(b), c, w, arcDeg);
       if (x == null) continue;
       const wb = wrap360(b);
       out.push({ b: wb, x, label: wb % 45 === 0 ? compass(wb) : null });
     }
     return out;
-  })();
+  }
+
+  $: winTicks = ticksFor(HORIZON_FOV, center, width);
+  $: ribbonTicks = ticksFor(RIBBON_ARC, center, width);
+  // window extent drawn on the ribbon, so the two scales relate visibly
+  $: winEdgeL = bearingToX(center - HORIZON_FOV / 2, center, width, RIBBON_ARC);
+  $: winEdgeR = bearingToX(center + HORIZON_FOV / 2, center, width, RIBBON_ARC);
 
   const ELEV_LINES = [5, 15, 30, 60];
 
@@ -144,38 +154,60 @@
         on:pointerdown={startDrag}
         role="presentation"
       >
-        <!-- 360° compass ribbon, centred on the view direction -->
+        <!-- compass ribbon: a scrolling arc (RIBBON_ARC wide) centred on the view -->
         <g class="ribbon">
           <rect x="0" y="0" width={width} height={RIBBON_H} class="ribbon-bg" />
-          {#each Array(24) as _, k}
-            {@const b = k * 15}
-            {@const x = width / 2 + (bearingDelta(b, center) / 360) * width}
-            <line x1={x} y1={b % 45 === 0 ? 4 : 10} x2={x} y2={RIBBON_H} class="tick" />
-            {#if b % 45 === 0}
-              <text {x} y="10" dominant-baseline="middle" class="rlabel">
-                {compass(b)}
+          {#if winEdgeL != null && winEdgeR != null}
+            <rect
+              x={winEdgeL}
+              y="0"
+              width={winEdgeR - winEdgeL}
+              height={RIBBON_H}
+              class="win-extent"
+            />
+          {/if}
+          {#each ribbonTicks as tk}
+            <line
+              x1={tk.x}
+              y1={tk.label ? 4 : 10}
+              x2={tk.x}
+              y2={RIBBON_H}
+              class="tick"
+            />
+            {#if tk.label}
+              <text x={tk.x} y="10" dominant-baseline="middle" class="rlabel">
+                {tk.label}
               </text>
             {/if}
           {/each}
           {#each $horizonTargets as t (t.hex + "r")}
-            <circle cx={ribbonX(t.bearingDeg)} cy={RIBBON_H - 3} r="2" fill={t.color} />
+            {@const rx = ribbonX(t.bearingDeg)}
+            {#if rx != null}
+              <circle cx={rx} cy={RIBBON_H - 3} r="2" fill={t.color} />
+            {/if}
           {/each}
           {#if $horizonBodies && $horizonBodies.sun.elevation > -2}
-            <g class="rbody sun" transform="translate({ribbonX($horizonBodies.sun.azimuth)} {RIBBON_H / 2})">
-              <circle r="6.5" class="rbody-bg" />
-              {#each SUN_RAYS as a}
-                <line class="ray" x1="0" y1="-3.6" x2="0" y2="-5" transform="rotate({a})" />
-              {/each}
-              <circle r="2.8" />
-            </g>
+            {@const rx = ribbonX($horizonBodies.sun.azimuth)}
+            {#if rx != null}
+              <g class="rbody sun" transform="translate({rx} {RIBBON_H / 2})">
+                <circle r="6.5" class="rbody-bg" />
+                {#each SUN_RAYS as a}
+                  <line class="ray" x1="0" y1="-3.6" x2="0" y2="-5" transform="rotate({a})" />
+                {/each}
+                <circle r="2.8" />
+              </g>
+            {/if}
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -2}
-            <g class="rbody moon" transform="translate({ribbonX($horizonBodies.moon.azimuth)} {RIBBON_H / 2})">
-              <circle r="6" class="rbody-bg" />
-              <circle r="3.4" class="moon-dark" />
-              <path class="moon-lit" d={moonPath(3.4, $horizonBodies.moonIllum, litRight)} />
-              <circle r="3.4" class="moon-ring" />
-            </g>
+            {@const rx = ribbonX($horizonBodies.moon.azimuth)}
+            {#if rx != null}
+              <g class="rbody moon" transform="translate({rx} {RIBBON_H / 2})">
+                <circle r="6" class="rbody-bg" />
+                <circle r="3.4" class="moon-dark" />
+                <path class="moon-lit" d={moonPath(3.4, $horizonBodies.moonIllum, litRight)} />
+                <circle r="3.4" class="moon-ring" />
+              </g>
+            {/if}
           {/if}
           <path
             d="M{width / 2 - 5} 0 L{width / 2 + 5} 0 L{width / 2} 6 Z"
@@ -357,6 +389,9 @@
   }
   .ribbon-bg {
     fill: var(--bg-elev);
+  }
+  .win-extent {
+    fill: var(--sel);
   }
   .tick {
     stroke: var(--text-dim);
