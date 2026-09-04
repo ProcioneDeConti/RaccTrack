@@ -8,6 +8,7 @@ use arc_swap::ArcSwap;
 
 use crate::airspace::Airspace;
 use crate::alerts::Alerts;
+use crate::charts::Charts;
 use crate::config::AppSettings;
 use crate::db::Db;
 use crate::enrich::airports::Airports;
@@ -27,6 +28,7 @@ pub struct AppState {
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,
     pub airspace: Arc<Airspace>,
+    pub charts: Arc<Charts>,
     pub airports: Arc<ArcSwap<Airports>>,
     pub db: Arc<Db>,
     pub settings: Arc<Mutex<AppSettings>>,

@@ -145,6 +145,34 @@ pub fn list_presets() -> Vec<crate::notable::Preset> {
     crate::notable::presets()
 }
 
+// --- airport charts (FAA d-TPP) ---
+
+#[tauri::command]
+pub async fn airport_charts(
+    state: State<'_, AppState>,
+    airport: String,
+) -> CmdResult<crate::charts::ChartSet> {
+    state.charts.charts_for(&airport).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn chart_pdf(
+    state: State<'_, AppState>,
+    url: String,
+) -> CmdResult<tauri::ipc::Response> {
+    let bytes = state.charts.pdf(&url).await.map_err(err)?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+pub fn open_external(app: AppHandle, url: String) -> CmdResult<()> {
+    if !url.starts_with("https://") {
+        return Err("only https URLs may be opened".into());
+    }
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(url, None::<&str>).map_err(err)
+}
+
 // --- watchlist ---
 
 #[tauri::command]

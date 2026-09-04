@@ -4,6 +4,7 @@
   import DetailPanel from "./lib/panel/DetailPanel.svelte";
   import LayersControl from "./lib/map/LayersControl.svelte";
   import AirportPanel from "./lib/map/AirportPanel.svelte";
+  import ChartViewer from "./lib/charts/ChartViewer.svelte";
   import FilterBar from "./lib/filters/FilterBar.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
@@ -141,6 +142,7 @@
     {/if}
     <DetailPanel />
     <AirportPanel />
+    <ChartViewer />
     <PinnedBar />
     <AlertToast />
   </div>

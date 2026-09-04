@@ -76,6 +76,23 @@ export function airspaceIn(bbox: Bbox): Promise<any> {
   return invoke("airspace_in", { bbox });
 }
 
+// --- airport charts (FAA d-TPP) ---
+
+import type { ChartSet } from "./types";
+
+export function airportCharts(airport: string): Promise<ChartSet> {
+  return invoke("airport_charts", { airport });
+}
+
+/** Chart PDF bytes (cached in SQLite backend-side). */
+export function chartPdf(url: string): Promise<ArrayBuffer> {
+  return invoke("chart_pdf", { url });
+}
+
+export function openExternal(url: string): Promise<void> {
+  return invoke("open_external", { url });
+}
+
 // --- presets ---
 
 import type { Preset } from "./types";

@@ -179,6 +179,24 @@ export interface StationWx {
   tafRaw: string | null;
 }
 
+// FAA d-TPP terminal procedure charts. Mirrors `src-tauri/src/charts.rs`.
+
+export interface ChartRef {
+  name: string; // "ILS OR LOC RWY 06R"
+  code: string; // "IAP" | "APD" | "DP" | "STAR" | "MIN" | ...
+  group: string; // "Approach Procedures"
+  pdfName: string;
+  url: string; // full aeronav.faa.gov URL
+}
+
+export interface ChartSet {
+  cycle: string; // "2609"
+  effective: string | null;
+  expires: string | null;
+  airport: string;
+  charts: ChartRef[];
+}
+
 export interface MapLayers {
   airports: boolean;
   weather: boolean;

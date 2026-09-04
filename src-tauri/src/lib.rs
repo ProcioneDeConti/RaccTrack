@@ -1,6 +1,7 @@
 mod airspace;
 mod alerts;
 mod app;
+mod charts;
 mod commands;
 mod config;
 mod db;
@@ -31,6 +32,7 @@ use crate::enrich::{
     photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
 use crate::airspace::Airspace;
+use crate::charts::Charts;
 use crate::emergency_watch::EmergencyWatch;
 use crate::geocode::Geocoder;
 use crate::ingest::{AircraftSource, HttpV2Source};
@@ -63,6 +65,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .register_asynchronous_uri_scheme_protocol("ofmtiles", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             let path = request.uri().path().trim_start_matches('/').to_string();
@@ -133,6 +136,7 @@ pub fn run() {
             let geocoder = Arc::new(Geocoder::new(db.clone(), http.clone()));
             let weather = Arc::new(Weather::new(db.clone(), http.clone()));
             let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
+            let charts = Arc::new(Charts::new(db.clone(), http.clone()));
             let tiles = Arc::new(TileCache::new(
                 db.clone(),
                 http.clone(),
@@ -156,6 +160,7 @@ pub fn run() {
                 geocoder: geocoder.clone(),
                 weather: weather.clone(),
                 airspace: airspace.clone(),
+                charts: charts.clone(),
                 airports: airports.clone(),
                 db: db.clone(),
                 settings: settings.clone(),
@@ -198,6 +203,9 @@ pub fn run() {
             commands::station_wx,
             commands::airspace_in,
             commands::list_presets,
+            commands::airport_charts,
+            commands::chart_pdf,
+            commands::open_external,
         ])
         .build(tauri::generate_context!())
         .expect("build tauri app")

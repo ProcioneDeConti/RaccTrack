@@ -29,6 +29,10 @@ export const layers = writable<MapLayers>({
 export const rangeRingsNm = writable<number[]>([25, 50, 100]);
 /** airport ident whose info panel is open */
 export const selectedAirport = writable<string | null>(null);
+/** airport whose chart viewer is open: { ident, label } or null */
+export const chartTarget = writable<{ ident: string; label: string } | null>(
+  null,
+);
 /** hex the map is locked to and follows */
 export const followHex = writable<string | null>(null);
 /** hexes pinned to the bottom bar */

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { selectedAirport } from "../state";
+  import { selectedAirport, chartTarget } from "../state";
   import { airportInfo, stationWx } from "../api/backend";
   import type { AirportInfo, StationWx } from "../api/types";
   import { altitude } from "../format";
@@ -44,6 +44,14 @@
 
   function close() {
     selectedAirport.set(null);
+  }
+
+  function openCharts() {
+    if (!info) return;
+    chartTarget.set({
+      ident: info.icao ?? info.ident ?? current!,
+      label: info.name,
+    });
   }
 
   const catColor: Record<string, string> = {
@@ -207,6 +215,13 @@
           </p>
         {/if}
       </section>
+
+      <section>
+        <h4>Charts</h4>
+        <button class="charts-btn" on:click={openCharts}>
+          Approach &amp; airport plates →
+        </button>
+      </section>
     {/if}
   </aside>
 {/if}
@@ -312,6 +327,20 @@
   }
   .taf {
     color: var(--text-dim);
+  }
+  .charts-btn {
+    width: 100%;
+    padding: 7px 10px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+  }
+  .charts-btn:hover {
+    border-color: var(--accent);
   }
   .rawtoggle {
     border: 1px solid var(--border);
