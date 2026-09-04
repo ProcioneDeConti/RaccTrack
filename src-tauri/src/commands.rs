@@ -9,6 +9,8 @@ use crate::app::AppState;
 use crate::config::AppSettings;
 use crate::enrich::AircraftDetail;
 use crate::geocode::GeoResult;
+use crate::ingest::model::Aircraft;
+use crate::ingest::normalize;
 use crate::region::Area;
 use crate::state::{AircraftDiff, TrailPoint};
 use crate::tiles::{DownloadProgress, TileCacheStats};
@@ -43,12 +45,36 @@ pub async fn get_aircraft_detail(
     state: State<'_, AppState>,
     hex: String,
 ) -> CmdResult<AircraftDetail> {
-    let ac = state
-        .live
-        .get(&hex)
-        .ok_or_else(|| format!("aircraft {hex} not in view"))?;
+    let hex = hex.to_lowercase();
+    let ac = match state.live.get(&hex) {
+        Some(ac) => ac,
+        // Not in the viewport feed (e.g. an NA-wide emergency-squawk hit) —
+        // pull just this aircraft straight from a source by hex.
+        None => fetch_aircraft_by_hex(state.inner(), &hex)
+            .await
+            .ok_or_else(|| format!("no live data for {hex} right now"))?,
+    };
     let contact = state.settings.lock().contact.clone();
     Ok(state.enricher.detail(ac, &contact).await)
+}
+
+/// On-demand single-aircraft fetch, trying each source until one knows the hex.
+async fn fetch_aircraft_by_hex(state: &AppState, hex: &str) -> Option<Aircraft> {
+    for source in &state.sources {
+        match source.by_hex(hex).await {
+            Ok(raw) => {
+                if let Some(mut ac) = normalize(raw, source.name(), now_ms())
+                    .into_iter()
+                    .find(|a| a.hex == hex)
+                {
+                    state.enricher.fill_identity(&mut ac);
+                    return Some(ac);
+                }
+            }
+            Err(e) => tracing::debug!("by_hex {hex} via {}: {e}", source.name()),
+        }
+    }
+    None
 }
 
 #[tauri::command]

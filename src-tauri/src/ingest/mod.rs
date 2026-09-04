@@ -88,6 +88,13 @@ pub trait AircraftSource: Send + Sync {
     /// Fetch every aircraft matching the given queries. Implementations should
     /// de-duplicate by hex across queries.
     async fn snapshot(&self, queries: &[PointQuery]) -> Result<Vec<RawAircraft>>;
+
+    /// Fetch a single aircraft by ICAO hex, on demand — used for an aircraft
+    /// that isn't in the viewport feed (e.g. an NA-wide emergency-squawk hit).
+    /// Default: not supported (empty result).
+    async fn by_hex(&self, _hex: &str) -> Result<Vec<RawAircraft>> {
+        Ok(Vec::new())
+    }
 }
 
 /// HTTP source for the ADSBExchange-v2 compatible community APIs
@@ -141,6 +148,11 @@ impl HttpV2Source {
 impl AircraftSource for HttpV2Source {
     fn name(&self) -> &str {
         self.name
+    }
+
+    async fn by_hex(&self, hex: &str) -> Result<Vec<RawAircraft>> {
+        let url = format!("{}/v2/hex/{}", self.base, hex.to_lowercase());
+        self.get(&url).await
     }
 
     async fn snapshot(&self, queries: &[PointQuery]) -> Result<Vec<RawAircraft>> {

@@ -157,6 +157,7 @@ pub fn run() {
 
             app.manage(AppState {
                 live: live.clone(),
+                sources: sources.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
                 tiles: tiles.clone(),

@@ -7,6 +7,7 @@
     pinned,
     togglePin,
     routeLine,
+    flyTo,
   } from "../state";
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
@@ -54,6 +55,12 @@
       if (currentHex === hex) {
         detail = d;
         photoIdx = 0;
+        // Aircraft that wasn't in the viewport feed (e.g. an emergency-squawk
+        // alert from the NA-wide watch): bring the map to it.
+        const a = d.aircraft;
+        if (a?.lat != null && a?.lon != null && !$aircraft.has(hex)) {
+          flyTo.set({ lat: a.lat, lon: a.lon, zoom: 7 });
+        }
       }
     } catch (e) {
       error = String(e);
