@@ -1,5 +1,6 @@
 <script lang="ts">
   import { aircraft, pinned, togglePin, selectedHex, flyTo } from "../state";
+  import { horizonOpen } from "../horizon";
   import { altitude, speed } from "../format";
   import Icon from "../ui/Icon.svelte";
 
@@ -19,7 +20,7 @@
 </script>
 
 {#if cards.length}
-  <div class="bar">
+  <div class="bar" class:lifted={$horizonOpen}>
     {#each cards as c (c.hex)}
       <button
         class="card"
@@ -67,6 +68,10 @@
     overflow-x: auto;
     z-index: 9;
     padding-bottom: 2px;
+    transition: bottom 0.15s ease;
+  }
+  .bar.lifted {
+    bottom: 210px;
   }
   .card {
     flex: 0 0 auto;

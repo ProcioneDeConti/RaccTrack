@@ -18,6 +18,7 @@
   import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
   import SearchBox from "./lib/search/SearchBox.svelte";
   import PinnedBar from "./lib/panel/PinnedBar.svelte";
+  import HorizonView from "./lib/horizon/HorizonView.svelte";
   import Rail from "./lib/ui/Rail.svelte";
   import {
     applyDiff,
@@ -37,6 +38,7 @@
     getSettings,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
+  import { horizonOpen } from "./lib/horizon";
   import { units } from "./lib/format";
   import type { Bbox } from "./lib/map/region";
   import iconUrl from "./assets/icon.png";
@@ -161,6 +163,7 @@
     <AirportPanel />
     <ChartViewer />
     <PinnedBar />
+    {#if $horizonOpen}<HorizonView />{/if}
     <AlertToast />
   </div>
   <StatusBar />

@@ -8,12 +8,18 @@ import { angleDelta } from "./geo";
 const D2R = Math.PI / 180;
 const R2D = 180 / Math.PI;
 
+/** Altitude (degrees above the horizon) and azimuth (degrees clockwise from N). */
+export interface SkyPosition {
+  azimuth: number;
+  elevation: number;
+}
+
 /** Apparent altitude/azimuth of the Sun for a place and instant. */
 export function solarPosition(
   date: Date,
   latDeg: number,
   lonDeg: number,
-): { azimuth: number; elevation: number } {
+): SkyPosition {
   // Days since the J2000.0 epoch (2000-01-01 12:00 UT).
   const n = date.getTime() / 86_400_000 + 2440587.5 - 2451545.0;
 

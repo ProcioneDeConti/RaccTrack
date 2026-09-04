@@ -54,6 +54,23 @@ export function angleDelta(a: number, b: number): number {
   return Math.abs(((a - b + 540) % 360) - 180);
 }
 
+/**
+ * Advance a position along a constant track at a constant ground speed (knots)
+ * for `seconds`, flat-earth. Returns `[lat, lon]`.
+ */
+export function deadReckon(
+  lat: number,
+  lon: number,
+  trackDeg: number,
+  gsKt: number,
+  seconds: number,
+): [number, number] {
+  const distNm = (gsKt / 3600) * seconds;
+  const dN = distNm * Math.cos(trackDeg * D2R);
+  const dE = distNm * Math.sin(trackDeg * D2R);
+  return [lat + dN / 60, lon + dE / (60 * Math.cos(lat * D2R))];
+}
+
 /** Compass point for a bearing, e.g. 200 -> "SSW". */
 export function compass(deg: number): string {
   const pts = [

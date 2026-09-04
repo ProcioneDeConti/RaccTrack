@@ -9,6 +9,7 @@
     upcomingPasses,
   } from "../state";
   import { passHorizonMin, passRadiusNm, type PredictedPass } from "../passes";
+  import { horizonOpen } from "../horizon";
   import { compass, fmtDistanceNm } from "../geo";
   import { altitude } from "../format";
 
@@ -41,6 +42,16 @@
 </script>
 
 <Panel title="Passes overhead" {onClose} width={340}>
+  <button
+    slot="actions"
+    class="hz-toggle"
+    class:on={$horizonOpen}
+    title="Toggle the horizon strip"
+    on:click={() => horizonOpen.update((v) => !v)}
+  >
+    <Icon name="crosshair" size={12} /> Horizon
+  </button>
+
   {#if !$primaryPlace}
     <p class="muted">
       Set a primary place in <strong>Places &amp; alerts</strong> (the star) and
@@ -131,6 +142,22 @@
 </Panel>
 
 <style>
+  .hz-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    padding: 3px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-dim);
+  }
+  .hz-toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
   .head {
     display: flex;
     align-items: center;
