@@ -41,13 +41,6 @@ export class Overlays {
   private fltCat = new Map<string, string>();
   private lastAirports: Airport[] = [];
   private handlersBound = false;
-  private fenceMarkers: {
-    marker: maplibregl.Marker;
-    el: HTMLDivElement;
-    lat: number;
-    radiusM: number;
-  }[] = [];
-  private fenceSig = "";
 
   constructor(map: MlMap) {
     this.map = map;
@@ -64,12 +57,6 @@ export class Overlays {
     }
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
-    }
-    // Geofences are drawn as `circle` layers (GPU point sprites, radius kept
-    // metric via a base-2 zoom interpolation) — a polygon/line circle rendered
-    // through geojson-vt tiling drops or inverts fill chunks at tile seams.
-    if (!m.getSource("ov-fences")) {
-      m.addSource("ov-fences", { type: "geojson", data: EMPTY as any });
     }
 
     const add = (layer: any) => {
@@ -92,19 +79,6 @@ export class Overlays {
         "line-opacity": 0.85,
       },
     });
-
-    // Retired fence layers from earlier polygon/line attempts.
-    for (const id of [
-      "ov-fences-glow",
-      "ov-fences-fill",
-      "ov-fences-casing",
-      "ov-fences-line",
-      "ov-fences-disc",
-      "ov-fences-disc-casing",
-    ]) {
-      if (m.getLayer(id)) m.removeLayer(id);
-    }
-    if (m.getSource("ov-fence-lines")) m.removeSource("ov-fence-lines");
 
     add({
       id: "ov-rings-casing",
@@ -130,25 +104,6 @@ export class Overlays {
       },
     });
 
-    // The fence disc itself is a DOM overlay (see renderFenceMarkers) — a
-    // `circle` layer culls the whole feature once its centre leaves the
-    // viewport, so a large fence vanishes when you zoom inside it.
-    add({
-      id: "ov-fences-label",
-      type: "symbol",
-      source: "ov-fences",
-      filter: ["==", ["get", "role"], "label"],
-      layout: {
-        "text-field": ["get", "label"],
-        "text-size": 10,
-        "text-font": ["Noto Sans Regular", "Open Sans Regular"],
-      },
-      paint: {
-        "text-color": "#f9c74f",
-        "text-halo-color": "#0d1117",
-        "text-halo-width": 1.2,
-      },
-    });
     add({
       id: "ov-rings-label",
       type: "symbol",
@@ -238,8 +193,6 @@ export class Overlays {
         const f = e.features?.[0];
         if (f) this.airspacePopup(e.lngLat, f);
       });
-      // Fence discs are DOM overlays sized in pixels — rescale as zoom changes.
-      m.on("move", () => this.resizeFenceMarkers());
     }
   }
 
@@ -346,68 +299,6 @@ export class Overlays {
       });
     }
     src.setData({ type: "FeatureCollection", features } as any);
-  }
-
-  setGeofences(
-    fences: {
-      label: string;
-      lat: number;
-      lon: number;
-      radiusNm: number;
-      enabled: boolean;
-    }[],
-  ) {
-    // Edge labels stay as map symbols (small point features, tile-safe).
-    const src = this.map.getSource("ov-fences") as GeoJSONSource | undefined;
-    src?.setData({
-      type: "FeatureCollection",
-      features: fences.map((f) => {
-        const [lon, lat] = destination(f.lat, f.lon, f.radiusNm, 0);
-        return {
-          type: "Feature",
-          properties: { role: "label", label: f.label },
-          geometry: { type: "Point", coordinates: [lon, lat] },
-        };
-      }),
-    } as any);
-
-    // The disc is a DOM circle so it survives the centre leaving the viewport.
-    const sig = JSON.stringify(fences);
-    if (sig === this.fenceSig) return;
-    this.fenceSig = sig;
-
-    for (const { marker } of this.fenceMarkers) marker.remove();
-    this.fenceMarkers = fences.map((f) => {
-      const el = document.createElement("div");
-      el.className = "geofence-disc";
-      el.dataset.enabled = String(f.enabled);
-      // setLngLat before addTo — a marker added without a position throws
-      // every render frame.
-      const marker = new maplibregl.Marker({ element: el })
-        .setLngLat([f.lon, f.lat])
-        .addTo(this.map);
-      return { marker, el, lat: f.lat, radiusM: f.radiusNm * NM_TO_M };
-    });
-    this.resizeFenceMarkers();
-  }
-
-  private resizeFenceMarkers() {
-    const z = this.map.getZoom();
-    for (const { el, lat, radiusM } of this.fenceMarkers) {
-      const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z;
-      // Cap at the browser's composited-layer limit (~16384 px on desktop GPUs;
-      // maplibre's marker transform forces compositing). Only fences wider than
-      // ~15 nm at the max zoom of 15 hit this, and only their off-screen edge is
-      // affected.
-      const d = Math.min((2 * radiusM) / mpp, 16000);
-      el.style.width = `${d}px`;
-      el.style.height = `${d}px`;
-    }
-  }
-
-  destroy() {
-    for (const { marker } of this.fenceMarkers) marker.remove();
-    this.fenceMarkers = [];
   }
 
   private airspacePopup(lngLat: any, f: MapGeoJSONFeature) {

@@ -44,7 +44,6 @@ pub struct Poller {
     pub live: Arc<LiveState>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
-    pub geofences: Arc<crate::geofence::Geofences>,
     pub sources: Vec<Arc<dyn AircraftSource>>,
     pub settings: Arc<Mutex<AppSettings>>,
     pub viewport: Arc<Mutex<Option<Area>>>,
@@ -62,7 +61,6 @@ impl Poller {
         live: Arc<LiveState>,
         enricher: Arc<Enricher>,
         alerts: Arc<Alerts>,
-        geofences: Arc<crate::geofence::Geofences>,
         sources: Vec<Arc<dyn AircraftSource>>,
         settings: Arc<Mutex<AppSettings>>,
         viewport: Arc<Mutex<Option<Area>>>,
@@ -72,7 +70,6 @@ impl Poller {
             live,
             enricher,
             alerts,
-            geofences,
             sources,
             settings,
             viewport,
@@ -156,8 +153,7 @@ impl Poller {
                     let feed_total = list.len() as u64;
                     let diff = self.live.ingest(list, feed_total, now);
 
-                    let mut alerts = self.alerts.evaluate(&diff);
-                    alerts.extend(self.geofences.evaluate(&diff));
+                    let alerts = self.alerts.evaluate(&diff);
                     let _ = app.emit("aircraft-diff", &diff);
                     for ev in alerts {
                         let _ = app.emit("alert", &ev);

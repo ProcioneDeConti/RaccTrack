@@ -36,7 +36,6 @@
     followHex,
     flyTo,
     mapBounds,
-    geofences,
     routeLine,
   } from "../state";
   import { setViewport, getTrail, getSettings } from "../api/backend";
@@ -61,7 +60,6 @@
   let overlayTimer: number | undefined;
   let unsubLayers: (() => void) | undefined;
   let unsubRings: (() => void) | undefined;
-  let unsubFences: (() => void) | undefined;
   let unsubFollow: (() => void) | undefined;
   let unsubFly: (() => void) | undefined;
   let unsubAircraft: (() => void) | undefined;
@@ -234,7 +232,6 @@
     try {
       overlays?.install();
       overlays?.setVisibility(curLayers);
-      overlays?.setGeofences(get(geofences) as any);
     } catch (e) {
       console.error("[diag] overlays install failed:", (e as Error)?.message ?? e);
     }
@@ -604,7 +601,6 @@
       refreshOverlays();
     });
     unsubRings = rangeRingsNm.subscribe(drawRings);
-    unsubFences = geofences.subscribe((f) => overlays?.setGeofences(f as any));
 
     // Home location: seed from settings (initial camera is already set above),
     // drop the marker, and react to later changes.
@@ -702,13 +698,11 @@
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();
-    unsubFences?.();
     unsubFollow?.();
     unsubFly?.();
     unsubAircraft?.();
     unsubHover?.();
     unsubRoute?.();
-    overlays?.destroy();
     homeMarker?.remove();
     map?.remove();
   });
@@ -785,21 +779,5 @@
   }
   :global(.home-marker svg) {
     display: block;
-  }
-  /* Geofence disc: a DOM circle so it never culls when its centre leaves view.
-     maplibre positions the marker at the centre; we size it in px on zoom. */
-  :global(.geofence-disc) {
-    border-radius: 50%;
-    pointer-events: none;
-    box-sizing: border-box;
-    border: 2.6px solid #ffd23f;
-    background: rgba(255, 210, 63, 0.16);
-    box-shadow:
-      0 0 0 2px rgba(13, 17, 23, 0.55),
-      inset 0 0 0 2px rgba(13, 17, 23, 0.55);
-  }
-  :global(.geofence-disc[data-enabled="false"]) {
-    border-color: #b0b4ba;
-    background: rgba(138, 138, 138, 0.06);
   }
 </style>

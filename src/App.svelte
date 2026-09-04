@@ -21,7 +21,6 @@
     pinned,
     visibleAircraft,
     emergencyCount,
-    geofences,
   } from "./lib/state";
   import {
     onDiff,
@@ -31,7 +30,6 @@
     getSnapshot,
     getSourceStatus,
     getSettings,
-    listGeofences,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { units } from "./lib/format";
@@ -81,11 +79,6 @@
         /* ignore */
       }
       await refreshWatch();
-      try {
-        geofences.set(await listGeofences());
-      } catch {
-        /* ignore */
-      }
     })();
 
     return () => {

@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS kv_cache (
     fetched_at INTEGER NOT NULL
 );
 
+-- Geofences: feature removed for now (rendering/eval issues); table kept so the
+-- data survives if it's brought back. See git history for src/geofence.rs.
 CREATE TABLE IF NOT EXISTS geofences (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     label     TEXT NOT NULL,

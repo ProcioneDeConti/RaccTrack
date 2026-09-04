@@ -45,17 +45,6 @@ export interface Preset {
   blurb: string;
 }
 
-export interface Geofence {
-  id: number;
-  label: string;
-  lat: number;
-  lon: number;
-  radiusNm: number;
-  maxAltFt: number | null;
-  milOnly: boolean;
-  enabled: boolean;
-}
-
 export type PositionSource = "adsb" | "mlat" | "tisb" | "other";
 
 export interface AircraftDiff {

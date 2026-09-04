@@ -5,45 +5,24 @@
     removeWatch,
     setWatchEnabled,
     listPresets,
-    listGeofences,
-    addGeofence,
-    removeGeofence,
-    setGeofenceEnabled,
   } from "../api/backend";
-  import type { WatchKind, Preset, Geofence } from "../api/types";
+  import type { WatchKind, Preset } from "../api/types";
   import { watchEntries, alertLog, refreshWatch } from "./watchStore";
-  import {
-    selectedHex,
-    visibleAircraft,
-    home,
-    flyTo,
-    geofences as geofenceStore,
-  } from "../state";
+  import { selectedHex, visibleAircraft, flyTo } from "../state";
 
   export let onClose: () => void;
 
-  let tab: "list" | "presets" | "feed" | "fences" | "log" = "list";
+  let tab: "list" | "presets" | "feed" | "log" = "list";
   let kind: WatchKind = "hex";
   let value = "";
   let label = "";
 
   let presets: Preset[] = [];
-  let fences: Geofence[] = [];
-
-  // new fence form
-  let fLabel = "";
-  let fRadius = 15;
-  let fMaxAlt = "";
-  let fMil = false;
 
   onMount(async () => {
     await refreshWatch();
     presets = await listPresets().catch(() => []);
-    fences = await listGeofences().catch(() => []);
-    geofenceStore.set(fences);
   });
-
-  $: geofenceStore.set(fences);
 
   $: presetActive = new Set(
     $watchEntries.filter((w) => w.kind === "preset").map((w) => w.value),
@@ -78,30 +57,6 @@
     await refreshWatch();
   }
 
-  async function createFence() {
-    if (!fLabel.trim() || !$home) return;
-    const g = await addGeofence({
-      label: fLabel.trim(),
-      lat: $home.lat,
-      lon: $home.lon,
-      radiusNm: fRadius,
-      maxAltFt: fMaxAlt.trim() ? Number(fMaxAlt) : null,
-      milOnly: fMil,
-      enabled: true,
-    });
-    fences = [...fences, g];
-    fLabel = "";
-    fMaxAlt = "";
-  }
-  async function delFence(id: number) {
-    await removeGeofence(id);
-    fences = fences.filter((f) => f.id !== id);
-  }
-  async function toggleFence(f: Geofence) {
-    await setGeofenceEnabled(f.id, !f.enabled);
-    fences = fences.map((x) => (x.id === f.id ? { ...x, enabled: !x.enabled } : x));
-  }
-
   $: feed = $visibleAircraft
     .filter((a) => a.military || a.interesting || a.pia || a.ladd)
     .slice(0, 60);
@@ -134,7 +89,6 @@
       <button class:active={tab === "feed"} on:click={() => (tab = "feed")}>
         Feed{#if feed.length} ({feed.length}){/if}
       </button>
-      <button class:active={tab === "fences"} on:click={() => (tab = "fences")}>Fences</button>
       <button class:active={tab === "log"} on:click={() => (tab = "log")}>
         Alerts{#if $alertLog.length} ({$alertLog.length}){/if}
       </button>
@@ -203,32 +157,6 @@
         <li class="muted">No military / interesting aircraft in view.</li>
       {/each}
     </ul>
-  {:else if tab === "fences"}
-    {#if !$home}
-      <p class="muted">Set a home location first — new fences are centred on it.</p>
-    {:else}
-      <form class="add fence" on:submit|preventDefault={createFence}>
-        <input placeholder="label" bind:value={fLabel} />
-        <label>radius <input type="number" min="1" max="250" bind:value={fRadius} /> nm</label>
-        <label>below <input type="number" placeholder="any" bind:value={fMaxAlt} /> ft</label>
-        <label><input type="checkbox" bind:checked={fMil} /> military only</label>
-        <button type="submit">Add fence around home</button>
-      </form>
-    {/if}
-    <ul>
-      {#each fences as f (f.id)}
-        <li>
-          <input type="checkbox" checked={f.enabled} on:change={() => toggleFence(f)} />
-          <span class="v">{f.label}</span>
-          <span class="l">
-            {f.radiusNm} nm{#if f.maxAltFt} · &lt;{Math.round(f.maxAltFt).toLocaleString()} ft{/if}{#if f.milOnly} · mil{/if}
-          </span>
-          <button class="rm" on:click={() => delFence(f.id)}>✕</button>
-        </li>
-      {:else}
-        <li class="muted">No geofences.</li>
-      {/each}
-    </ul>
   {:else}
     <ul class="log">
       {#each $alertLog as a}
@@ -283,24 +211,12 @@
     gap: 4px;
     margin-bottom: 8px;
   }
-  .add.fence {
-    grid-template-columns: 1fr;
-  }
   .add select,
   .add input {
     min-width: 0;
   }
   .add button {
     grid-column: 1 / -1;
-  }
-  .add.fence label {
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  }
-  .add.fence label input {
-    width: 70px;
   }
   ul {
     list-style: none;

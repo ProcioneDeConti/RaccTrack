@@ -37,10 +37,6 @@ export const pinned = writable<string[]>([]);
 export const flyTo = writable<{ lat: number; lon: number; zoom?: number } | null>(
   null,
 );
-import type { Geofence } from "./api/types";
-/** geofences, kept in sync so the map can draw them */
-export const geofences = writable<Geofence[]>([]);
-
 /**
  * Great-circle route of the selected aircraft, split into the leg already
  * flown and the leg remaining, for the map's two-tone route line.

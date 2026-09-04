@@ -76,28 +76,12 @@ export function airspaceIn(bbox: Bbox): Promise<any> {
   return invoke("airspace_in", { bbox });
 }
 
-// --- presets + geofences ---
+// --- presets ---
 
-import type { Preset, Geofence } from "./types";
+import type { Preset } from "./types";
 
 export function listPresets(): Promise<Preset[]> {
   return invoke("list_presets");
-}
-
-export function listGeofences(): Promise<Geofence[]> {
-  return invoke("list_geofences");
-}
-
-export function addGeofence(fence: Omit<Geofence, "id">): Promise<Geofence> {
-  return invoke("add_geofence", { fence });
-}
-
-export function removeGeofence(id: number): Promise<void> {
-  return invoke("remove_geofence", { id });
-}
-
-export function setGeofenceEnabled(id: number, enabled: boolean): Promise<void> {
-  return invoke("set_geofence_enabled", { id, enabled });
 }
 
 // --- watchlist ---

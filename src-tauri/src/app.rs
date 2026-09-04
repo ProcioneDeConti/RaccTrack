@@ -13,7 +13,6 @@ use crate::db::Db;
 use crate::enrich::airports::Airports;
 use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
-use crate::geofence::Geofences;
 use crate::poller::SourceStatus;
 use crate::region::Area;
 use crate::state::LiveState;
@@ -24,7 +23,6 @@ pub struct AppState {
     pub live: Arc<LiveState>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
-    pub geofences: Arc<Geofences>,
     pub tiles: Arc<TileCache>,
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,
