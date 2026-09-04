@@ -163,7 +163,7 @@
     z-index: 20;
     max-height: 320px;
     overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-pop);
   }
   .grp {
     padding: 4px 6px 2px;

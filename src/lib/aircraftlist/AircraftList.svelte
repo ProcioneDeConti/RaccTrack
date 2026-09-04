@@ -220,7 +220,7 @@
   td {
     padding: 4px 6px;
     white-space: nowrap;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--hairline);
   }
   tbody tr {
     cursor: pointer;
@@ -229,7 +229,7 @@
     background: var(--bg-elev);
   }
   tr.sel {
-    background: rgba(76, 155, 232, 0.18);
+    background: var(--sel);
   }
   tr.follow td.cs {
     box-shadow: inset 2px 0 0 var(--accent);
@@ -251,7 +251,7 @@
     font-weight: 600;
   }
   .mil {
-    color: #7ee2b8;
+    color: var(--ok);
     font-size: 9px;
     margin-left: 3px;
   }

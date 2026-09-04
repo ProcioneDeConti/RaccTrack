@@ -79,7 +79,7 @@
     border-radius: 8px;
     padding: 5px 9px;
     text-align: left;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--shadow-pop);
   }
   .card.sel {
     border-color: var(--accent);

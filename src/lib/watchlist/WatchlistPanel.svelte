@@ -238,7 +238,7 @@
   .feed .fl {
     margin-left: auto;
     font-size: 9px;
-    color: #7ee2b8;
+    color: var(--ok);
     letter-spacing: 0.03em;
   }
   .link {

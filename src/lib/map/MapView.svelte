@@ -445,6 +445,14 @@
       map.setPaintProperty("aircraft-symbol", "icon-halo-color", lab.outline);
       map.setPaintProperty("aircraft-symbol", "text-color", lab.text);
       map.setPaintProperty("aircraft-symbol", "text-halo-color", lab.halo);
+      // Overlay labels (airports, range rings) flip with the basemap too.
+      for (const id of ["ov-airport-label", "ov-rings-label"]) {
+        if (!map.getLayer(id)) continue;
+        map.setPaintProperty(id, "text-color", lab.text);
+        map.setPaintProperty(id, "text-halo-color", lab.halo);
+      }
+      if (map.getLayer("ov-airport-dot"))
+        map.setPaintProperty("ov-airport-dot", "circle-stroke-color", lab.halo);
     }
 
     if (freshInstall) {
@@ -811,9 +819,9 @@
     transform: translateX(-50%);
     z-index: 6;
     max-width: 70%;
-    background: #5a1e1e;
+    background: var(--bg-panel);
     border: 1px solid var(--emergency);
-    color: #ffd7d3;
+    color: var(--emergency);
     font-size: 11px;
     padding: 4px 10px;
     border-radius: 6px;

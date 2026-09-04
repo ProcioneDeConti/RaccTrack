@@ -50,7 +50,7 @@
     border-radius: 8px;
     padding: 8px 14px;
     z-index: 20;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-pop);
   }
   .toast.emg {
     border-color: var(--emergency);

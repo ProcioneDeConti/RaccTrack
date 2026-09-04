@@ -357,7 +357,7 @@
   }
   .pane {
     flex: 1;
-    background: #333;
+    background: var(--bg-elev);
     min-height: 0;
   }
   .pane iframe {

@@ -306,7 +306,7 @@
     border-radius: 10px;
     padding: 12px 14px;
     z-index: 10;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--shadow-panel);
   }
   header {
     position: relative;

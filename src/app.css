@@ -1,4 +1,6 @@
 :root {
+  /* Dark chrome (default). `theme-light` on <html> swaps these for a light
+     basemap — set by main.ts from the active basemap's `dark` flag (V6). */
   --bg: #0e1116;
   --bg-panel: #161b22;
   --bg-elev: #1c232d;
@@ -7,6 +9,11 @@
   --text-dim: #8b949e;
   --accent: #4c9be8;
   --emergency: #ff3b30;
+  --ok: #7ee2b8; /* "healthy" / MIL / interesting green */
+  --hairline: rgba(255, 255, 255, 0.05);
+  --sel: rgba(76, 155, 232, 0.18);
+  --shadow-panel: 0 8px 30px rgba(0, 0, 0, 0.45);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
   /* Data-driven palettes (altitude bands, flight categories, airspace classes,
      caution tape) live in src/lib/theme/colors.ts — map layers and canvas
      markers can't read CSS vars. --accent / --emergency are mirrored there. */
@@ -31,6 +38,24 @@
   font-size: 14px;
   color: var(--text);
   background: var(--bg);
+}
+
+:root.theme-light {
+  --bg: #eef1f4;
+  --bg-panel: #ffffff;
+  --bg-elev: #e9edf1;
+  --border: #d5dae0;
+  --text: #1a1f26;
+  --text-dim: #5b6672;
+  /* Slightly deeper than the map accent (#4c9be8) for text/AA contrast on white.
+     The map-layer ACCENT in theme/colors.ts is unaffected. */
+  --accent: #2b7cd3;
+  --ok: #12805a;
+  --hairline: rgba(0, 0, 0, 0.06);
+  --sel: rgba(76, 155, 232, 0.16);
+  --shadow-panel: 0 6px 22px rgba(15, 30, 50, 0.16);
+  --shadow-pop: 0 6px 20px rgba(15, 30, 50, 0.18);
+  color-scheme: light;
 }
 
 * {

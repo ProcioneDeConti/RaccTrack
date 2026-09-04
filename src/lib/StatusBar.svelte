@@ -52,7 +52,7 @@
     z-index: 8;
   }
   .src {
-    color: #7ee2b8;
+    color: var(--ok);
     display: inline-flex;
     align-items: center;
     gap: 5px;
