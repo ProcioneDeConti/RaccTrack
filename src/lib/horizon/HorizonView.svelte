@@ -61,14 +61,9 @@
 
   const SUN_RAYS = [0, 45, 90, 135, 180, 225, 270, 315];
 
-  /** Where to draw a sky body in the window: its (x, y), or clamped to an edge
-   *  with `off` set when it's outside the field of view. */
-  function bodyScreen(azimuth: number, elevation: number) {
-    const y = yFor(elevation);
-    const x = bearingToX(azimuth, center, width);
-    if (x != null) return { x, y, off: false };
-    return { x: bearingDelta(azimuth, center) > 0 ? width - 9 : 9, y, off: true };
-  }
+  /** Ribbon x for an azimuth (the ribbon always spans the full 360°). */
+  const ribbonX = (azimuth: number) =>
+    width / 2 + (bearingDelta(azimuth, center) / 360) * width;
 
   /** SVG path for the Moon's lit portion, radius `r`, illuminated fraction `k`,
    *  lit limb on the right when `litRight`. Centred on the origin. */
@@ -163,27 +158,23 @@
             {/if}
           {/each}
           {#each $horizonTargets as t (t.hex + "r")}
-            {@const x = width / 2 + (bearingDelta(t.bearingDeg, center) / 360) * width}
-            <circle cx={x} cy={RIBBON_H - 3} r="2" fill={t.color} />
+            <circle cx={ribbonX(t.bearingDeg)} cy={RIBBON_H - 3} r="2" fill={t.color} />
           {/each}
           {#if $horizonBodies && $horizonBodies.sun.elevation > -2}
-            <g
-              class="rbody sun"
-              transform="translate({width / 2 + (bearingDelta($horizonBodies.sun.azimuth, center) / 360) * width} {RIBBON_H / 2})"
-            >
+            <g class="rbody sun" transform="translate({ribbonX($horizonBodies.sun.azimuth)} {RIBBON_H / 2})">
+              <circle r="6.5" class="rbody-bg" />
               {#each SUN_RAYS as a}
-                <line class="ray" x1="0" y1="-3.4" x2="0" y2="-4.7" transform="rotate({a})" />
+                <line class="ray" x1="0" y1="-3.6" x2="0" y2="-5" transform="rotate({a})" />
               {/each}
-              <circle r="2.6" />
+              <circle r="2.8" />
             </g>
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -2}
-            <g
-              class="rbody moon"
-              transform="translate({width / 2 + (bearingDelta($horizonBodies.moon.azimuth, center) / 360) * width} {RIBBON_H / 2})"
-            >
-              <circle r="3" class="moon-dark" />
-              <path class="moon-lit" d={moonPath(3, $horizonBodies.moonIllum, litRight)} />
+            <g class="rbody moon" transform="translate({ribbonX($horizonBodies.moon.azimuth)} {RIBBON_H / 2})">
+              <circle r="6" class="rbody-bg" />
+              <circle r="3.4" class="moon-dark" />
+              <path class="moon-lit" d={moonPath(3.4, $horizonBodies.moonIllum, litRight)} />
+              <circle r="3.4" class="moon-ring" />
             </g>
           {/if}
           <path
@@ -214,43 +205,33 @@
           {/each}
 
           {#if $horizonBodies && $horizonBodies.sun.elevation > -1}
-            {@const s = bodyScreen(
-              $horizonBodies.sun.azimuth,
-              $horizonBodies.sun.elevation,
-            )}
-            <g class="body sun" class:off={s.off} transform="translate({s.x} {s.y})">
-              {#if s.off}
-                <path
-                  class="edge"
-                  d={s.x < width / 2 ? "M4 -5 L-3 0 L4 5" : "M-4 -5 L3 0 L-4 5"}
-                />
-              {:else}
+            {@const sx = bearingToX($horizonBodies.sun.azimuth, center, width)}
+            {#if sx != null}
+              <g
+                class="body sun"
+                transform="translate({sx} {yFor($horizonBodies.sun.elevation)})"
+              >
                 {#each SUN_RAYS as a}
                   <line class="ray" x1="0" y1="-8" x2="0" y2="-11" transform="rotate({a})" />
                 {/each}
                 <circle r="5.5" />
-              {/if}
-              <text y="-15">Sun</text>
-            </g>
+                <text y="-15">Sun</text>
+              </g>
+            {/if}
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -1}
-            {@const m = bodyScreen(
-              $horizonBodies.moon.azimuth,
-              $horizonBodies.moon.elevation,
-            )}
-            <g class="body moon" class:off={m.off} transform="translate({m.x} {m.y})">
-              {#if m.off}
-                <path
-                  class="edge"
-                  d={m.x < width / 2 ? "M4 -5 L-3 0 L4 5" : "M-4 -5 L3 0 L-4 5"}
-                />
-              {:else}
+            {@const mx = bearingToX($horizonBodies.moon.azimuth, center, width)}
+            {#if mx != null}
+              <g
+                class="body moon"
+                transform="translate({mx} {yFor($horizonBodies.moon.elevation)})"
+              >
                 <circle r="6" class="moon-dark" />
                 <path class="moon-lit" d={moonPath(6, $horizonBodies.moonIllum, litRight)} />
                 <circle r="6" class="moon-ring" />
-              {/if}
-              <text y="-15">Moon</text>
-            </g>
+                <text y="-15">Moon</text>
+              </g>
+            {/if}
           {/if}
 
           {#each $horizonTargets as t (t.hex)}
@@ -434,15 +415,8 @@
     stroke: #8b96a5;
     stroke-width: 0.75;
   }
-  .body .edge {
-    fill: none;
-    stroke: var(--accent);
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .body.off text {
-    fill: var(--text-dim);
+  .rbody-bg {
+    fill: var(--bg-elev);
   }
   .tgt {
     cursor: pointer;
