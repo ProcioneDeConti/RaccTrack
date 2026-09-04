@@ -51,6 +51,11 @@ pub struct AircraftDetail {
     pub route: Option<RouteInfo>,
     /// Up to ~6 photos; first is the hero image.
     pub photos: Vec<Photo>,
+    /// Epoch ms this aircraft was first seen airborne this session (set by the
+    /// command from live state, not the enricher).
+    pub airborne_since: Option<i64>,
+    /// True when `airborne_since` is a witnessed departure, not a lower bound.
+    pub saw_departure: bool,
 }
 
 pub struct Enricher {
@@ -151,6 +156,8 @@ impl Enricher {
             type_details,
             route,
             photos,
+            airborne_since: None,
+            saw_departure: false,
         }
     }
 

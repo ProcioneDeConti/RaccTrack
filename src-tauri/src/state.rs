@@ -17,6 +17,17 @@ const TRAIL_MAX_AGE_MS: i64 = 45 * 60 * 1000;
 const TRAIL_MIN_MOVE_DEG: f64 = 0.0015;
 const TRAIL_MIN_INTERVAL_MS: i64 = 3_000;
 
+/// When we first saw an aircraft airborne this session. `saw_departure` is true
+/// only if we had it on the ground first and watched it lift off (so `since_ms`
+/// is a real off-block/rotation time); otherwise it's a lower bound — we picked
+/// the flight up mid-air.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AirborneInfo {
+    pub since_ms: i64,
+    pub saw_departure: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrailPoint {
@@ -40,6 +51,7 @@ pub struct AircraftDiff {
 pub struct LiveState {
     aircraft: DashMap<String, Aircraft>,
     trails: DashMap<String, VecDeque<TrailPoint>>,
+    airborne: DashMap<String, AirborneInfo>,
     total: parking_lot::Mutex<u64>,
 }
 
@@ -48,6 +60,7 @@ impl LiveState {
         Self {
             aircraft: DashMap::new(),
             trails: DashMap::new(),
+            airborne: DashMap::new(),
             total: parking_lot::Mutex::new(0),
         }
     }
@@ -58,6 +71,11 @@ impl LiveState {
 
     pub fn get(&self, hex: &str) -> Option<Aircraft> {
         self.aircraft.get(hex).map(|r| r.clone())
+    }
+
+    /// When this aircraft was first seen airborne this session, if it's up now.
+    pub fn airborne(&self, hex: &str) -> Option<AirborneInfo> {
+        self.airborne.get(hex).map(|r| *r)
     }
 
     pub fn snapshot(&self) -> Vec<Aircraft> {
@@ -95,6 +113,19 @@ impl LiveState {
             present.insert(ac.hex.clone());
             self.append_trail(&ac, now_ms);
 
+            // Track "airborne since" for the flight-progress widget.
+            let prev_on_ground = self.aircraft.get(&ac.hex).map(|r| r.on_ground);
+            if ac.on_ground {
+                self.airborne.remove(&ac.hex);
+            } else {
+                self.airborne
+                    .entry(ac.hex.clone())
+                    .or_insert_with(|| AirborneInfo {
+                        since_ms: now_ms,
+                        saw_departure: prev_on_ground == Some(true),
+                    });
+            }
+
             match self.aircraft.entry(ac.hex.clone()) {
                 dashmap::mapref::entry::Entry::Occupied(mut e) => {
                     e.insert(ac.clone());
@@ -117,6 +148,7 @@ impl LiveState {
         for hex in to_remove {
             self.aircraft.remove(&hex);
             self.trails.remove(&hex);
+            self.airborne.remove(&hex);
             diff.removed.push(hex);
         }
 

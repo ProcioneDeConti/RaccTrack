@@ -111,6 +111,10 @@ export interface AircraftDetail {
   typeDetails: AcType | null;
   route: RouteInfo | null;
   photos: PhotoInfo[];
+  /** epoch ms first seen airborne this session (null if on the ground / unknown) */
+  airborneSince: number | null;
+  /** true when airborneSince is a witnessed departure, not just a lower bound */
+  sawDeparture: boolean;
 }
 
 export interface SourceStatus {

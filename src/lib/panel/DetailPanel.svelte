@@ -12,6 +12,7 @@
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
   import DatalinkSection from "./DatalinkSection.svelte";
+  import RouteProgress from "./RouteProgress.svelte";
   import Icon from "../ui/Icon.svelte";
   import {
     altitude,
@@ -21,13 +22,7 @@
     age,
     squawkMeaning,
   } from "../format";
-  import {
-    distanceNm,
-    fmtDistanceNm,
-    fmtDuration,
-    gcPath,
-    projectOntoTrack,
-  } from "../geo";
+  import { distanceNm, gcPath, projectOntoTrack } from "../geo";
 
   let detail: AircraftDetail | null = null;
   let loading = false;
@@ -279,45 +274,7 @@
     <section>
       <h4>Route</h4>
       {#if detail?.route && (detail.route.originIcao || detail.route.destinationIcao)}
-        <div class="route">
-          <div>
-            <strong>{detail.route.originIcao ?? "?"}</strong>
-            <span class="muted">{detail.route.originName ?? ""}</span>
-          </div>
-          <div class="arrow"><Icon name="arrow-right" size={15} /></div>
-          <div>
-            <strong>{detail.route.destinationIcao ?? "?"}</strong>
-            <span class="muted">{detail.route.destinationName ?? ""}</span>
-          </div>
-        </div>
-        {#if prog?.known}
-          <div class="bar" title="Great-circle position — no schedule data">
-            <div class="bar-fill" style="width:{prog.pct}%"></div>
-          </div>
-          <div class="prog">
-            <span>{prog.pct}%</span>
-            <span>{fmtDistanceNm(prog.flown)} flown · {fmtDistanceNm(prog.toGo)} to go</span>
-          </div>
-          <p class="eta" title="Rough estimate from ground speed — no schedule data">
-            {#if prog.etaHrs != null}
-              ~{fmtDuration(prog.etaHrs)} to {prog.destIcao ?? "destination"} (est.)
-            {:else}
-              {fmtDistanceNm(prog.total)} total
-            {/if}
-          </p>
-        {:else if prog?.stale}
-          <p class="eta muted">
-            {fmtDistanceNm(prog.total)} total · aircraft isn't on this path —
-            route data{#if prog.updatedYear} (from {prog.updatedYear}){/if} looks out of date.
-          </p>
-        {:else if prog}
-          <p class="eta muted">{fmtDistanceNm(prog.total)} total</p>
-        {/if}
-        {#if prog?.known && prog.updatedYear}
-          <p class="src" title="hexdb route records are keyed by flight number and can lag reality">
-            route data from {prog.updatedYear}
-          </p>
-        {/if}
+        <RouteProgress {detail} {prog} />
       {:else}
         <p class="muted">Unknown</p>
       {/if}
@@ -564,51 +521,9 @@
   .mono {
     font-family: ui-monospace, monospace;
   }
-  .route {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 6px;
-  }
-  .route .muted {
-    display: block;
-    font-size: 11px;
-  }
-  .arrow {
-    color: var(--accent);
-    display: inline-flex;
-    align-items: center;
-  }
   dd.vr :global(svg) {
     display: inline-block;
     vertical-align: middle;
-    color: var(--text-dim);
-  }
-  .bar {
-    margin-top: 8px;
-    height: 5px;
-    border-radius: 3px;
-    background: var(--border);
-    overflow: hidden;
-  }
-  .bar-fill {
-    height: 100%;
-    background: var(--accent);
-  }
-  .prog {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 3px;
-  }
-  .eta {
-    margin: 4px 0 0;
-    font-size: 12px;
-  }
-  .src {
-    margin: 2px 0 0;
-    font-size: 10px;
     color: var(--text-dim);
   }
   .err {

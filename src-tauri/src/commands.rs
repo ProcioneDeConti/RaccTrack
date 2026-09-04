@@ -55,7 +55,12 @@ pub async fn get_aircraft_detail(
             .ok_or_else(|| format!("no live data for {hex} right now"))?,
     };
     let contact = state.settings.lock().contact.clone();
-    Ok(state.enricher.detail(ac, &contact).await)
+    let mut detail = state.enricher.detail(ac, &contact).await;
+    if let Some(info) = state.live.airborne(&hex) {
+        detail.airborne_since = Some(info.since_ms);
+        detail.saw_departure = info.saw_departure;
+    }
+    Ok(detail)
 }
 
 /// On-demand single-aircraft fetch, trying each source until one knows the hex.
