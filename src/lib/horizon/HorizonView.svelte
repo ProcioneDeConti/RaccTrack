@@ -64,9 +64,10 @@
 
   const SUN_RAYS = [0, 45, 90, 135, 180, 225, 270, 315];
 
-  /** Ribbon x for an azimuth, or null once it scrolls past the ribbon's arc. */
-  const ribbonX = (azimuth: number) =>
-    bearingToX(azimuth, center, width, RIBBON_ARC);
+  /** Ribbon x for an azimuth, or null once it scrolls past the ribbon's arc.
+   *  Takes `c`/`w` explicitly so template `{@const}`s re-run when the view pans. */
+  const ribbonX = (azimuth: number, c: number, w: number) =>
+    bearingToX(azimuth, c, w, RIBBON_ARC);
 
   /** SVG path for the Moon's lit portion, radius `r`, illuminated fraction `k`,
    *  lit limb on the right when `litRight`. Centred on the origin. */
@@ -181,13 +182,13 @@
             {/if}
           {/each}
           {#each $horizonTargets as t (t.hex + "r")}
-            {@const rx = ribbonX(t.bearingDeg)}
+            {@const rx = ribbonX(t.bearingDeg, center, width)}
             {#if rx != null}
               <circle cx={rx} cy={RIBBON_H - 3} r="2" fill={t.color} />
             {/if}
           {/each}
           {#if $horizonBodies && $horizonBodies.sun.elevation > -2}
-            {@const rx = ribbonX($horizonBodies.sun.azimuth)}
+            {@const rx = ribbonX($horizonBodies.sun.azimuth, center, width)}
             {#if rx != null}
               <g class="rbody sun" transform="translate({rx} {RIBBON_H / 2})">
                 <circle r="6.5" class="rbody-bg" />
@@ -199,7 +200,7 @@
             {/if}
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -2}
-            {@const rx = ribbonX($horizonBodies.moon.azimuth)}
+            {@const rx = ribbonX($horizonBodies.moon.azimuth, center, width)}
             {#if rx != null}
               <g class="rbody moon" transform="translate({rx} {RIBBON_H / 2})">
                 <circle r="6" class="rbody-bg" />
