@@ -33,6 +33,7 @@
     | "info"
     | "book"
     | "map-pin"
+    | "pencil"
     | "plus";
 
   export const ICON_PATHS: Record<IconName, string[]> = {
@@ -107,6 +108,10 @@
     "map-pin": [
       "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0",
       "M15 10a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z",
+    ],
+    pencil: [
+      "M12 20h9",
+      "M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z",
     ],
   };
 </script>

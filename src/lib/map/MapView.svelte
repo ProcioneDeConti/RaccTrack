@@ -42,8 +42,9 @@
     mapBounds,
     routeLine,
   } from "../state";
-  import { setViewport, getTrail, getSettings } from "../api/backend";
+  import { setViewport, getTrail, getSettings, updateSettings } from "../api/backend";
   import type { TrailPoint, MapLayers, Place } from "../api/types";
+  import { copyText } from "../ui/clipboard";
   import { get } from "svelte/store";
   import { ACCENT, EMERGENCY, ALT_GRADIENT } from "../theme/colors";
 
@@ -58,6 +59,10 @@
   let container: HTMLDivElement;
   let map: MlMap | undefined;
   let mapError = "";
+  /** Right-click context menu: screen position + the lat/lon under the cursor. */
+  let ctxMenu: { x: number; y: number; lat: number; lon: number } | null = null;
+  let ctxToast = "";
+  let ctxToastTimer: number | undefined;
   let interactionsInstalled = false;
   let moveTimer: number | undefined;
   let trailTimer: number | undefined;
@@ -89,6 +94,8 @@
   };
 
   const EMPTY_FC = { type: "FeatureCollection", features: [] } as const;
+
+  const preventNativeMenu = (e: Event) => e.preventDefault();
 
   function pushViewport() {
     if (!map) return;
@@ -518,11 +525,66 @@
       }
     });
     map.on("click", (e) => {
+      closeCtx();
       const hits = map!.queryRenderedFeatures(e.point, {
         layers: ["aircraft-symbol"],
       });
       if (hits.length === 0) selectedHex.set(null);
     });
+
+    map.on("contextmenu", (e) => {
+      const el = container;
+      const MENU_W = 210;
+      const MENU_H = 108;
+      const x = Math.max(6, Math.min(e.point.x, el.clientWidth - MENU_W));
+      const y = Math.max(6, Math.min(e.point.y, el.clientHeight - MENU_H));
+      // Normalise longitude in case the map has wrapped past the antimeridian.
+      const lon = ((e.lngLat.lng + 540) % 360) - 180;
+      ctxMenu = { x, y, lat: e.lngLat.lat, lon };
+    });
+    map.on("movestart", closeCtx);
+    map.on("dragstart", closeCtx);
+  }
+
+  function closeCtx() {
+    ctxMenu = null;
+  }
+
+  function flashToast(msg: string) {
+    ctxToast = msg;
+    if (ctxToastTimer) clearTimeout(ctxToastTimer);
+    ctxToastTimer = window.setTimeout(() => (ctxToast = ""), 2200);
+  }
+
+  async function copyCoords(lat: number, lon: number) {
+    closeCtx();
+    const ok = await copyText(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+    flashToast(ok ? "Coordinates copied" : "Couldn't copy coordinates");
+  }
+
+  async function addPlaceHere(lat: number, lon: number) {
+    closeCtx();
+    const cur = get(places);
+    const p: Place = {
+      id:
+        crypto.randomUUID?.() ??
+        `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+      label: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+      lat,
+      lon,
+      kind: "coordinates",
+      bbox: null,
+      primary: cur.length === 0,
+      alert: { enabled: false, radiusNm: 10, ceilingFt: null, notableOnly: false },
+    };
+    const next = [...cur, p];
+    try {
+      const s = await updateSettings({ places: next });
+      places.set(s.places ?? next);
+      flashToast("Place added — rename it in Places & alerts");
+    } catch {
+      flashToast("Couldn't add place");
+    }
   }
 
   onMount(async () => {
@@ -562,6 +624,9 @@
       transformRequest,
     });
     overlays = new Overlays(map);
+
+    // Suppress the webview's native context menu over the map so ours shows.
+    container.addEventListener("contextmenu", preventNativeMenu);
 
     map.on("error", (e) => {
       // Surfaced so a broken basemap / tile source is visible during testing.
@@ -807,6 +872,8 @@
     if (overlayTimer) clearTimeout(overlayTimer);
     if (styleSettleTimer) clearTimeout(styleSettleTimer);
     if (restoreBoundsTimer) clearTimeout(restoreBoundsTimer);
+    if (ctxToastTimer) clearTimeout(ctxToastTimer);
+    container?.removeEventListener("contextmenu", preventNativeMenu);
     unsubGeo?.();
     unsubSel?.();
     unsubBasemap?.();
@@ -840,7 +907,36 @@
   }
 </script>
 
+<svelte:window
+  on:keydown={(e) => e.key === "Escape" && closeCtx()}
+  on:click={() => ctxMenu && closeCtx()}
+  on:blur={closeCtx}
+/>
+
 <div class="map" bind:this={container}></div>
+
+{#if ctxMenu}
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="ctx-menu"
+    style="left:{ctxMenu.x}px; top:{ctxMenu.y}px"
+    on:contextmenu|preventDefault
+  >
+    <div class="ctx-coord">
+      {ctxMenu.lat.toFixed(5)}, {ctxMenu.lon.toFixed(5)}
+    </div>
+    <button on:click={() => ctxMenu && copyCoords(ctxMenu.lat, ctxMenu.lon)}>
+      <Icon name="crosshair" size={13} /> Copy coordinates
+    </button>
+    <button on:click={() => ctxMenu && addPlaceHere(ctxMenu.lat, ctxMenu.lon)}>
+      <Icon name="map-pin" size={13} /> Add place here
+    </button>
+  </div>
+{/if}
+
+{#if ctxToast}
+  <div class="ctx-toast">{ctxToast}</div>
+{/if}
 
 {#if !mapError && $aircraftGeoJson.features.length === 0}
   <div class="empty-mark">
@@ -925,6 +1021,57 @@
     font-size: var(--fs-md);
     font-weight: 600;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+  .ctx-menu {
+    position: absolute;
+    z-index: 20;
+    min-width: 190px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-panel);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .ctx-coord {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    padding: 3px 8px 5px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3px;
+  }
+  .ctx-menu button {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    text-align: left;
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: var(--fs-md);
+    padding: 6px 8px;
+    border-radius: 4px;
+  }
+  .ctx-menu button:hover {
+    background: var(--bg-elev);
+  }
+  .ctx-toast {
+    position: absolute;
+    bottom: 34px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: var(--fs-md);
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-panel);
   }
   :global(.place-marker) {
     cursor: pointer;
