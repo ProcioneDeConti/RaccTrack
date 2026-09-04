@@ -1,7 +1,8 @@
 <script lang="ts">
-  // Front-facing raccoon head — pointed ears, pale bandit mask (cut from the
-  // silhouette), dark eyes, snub nose. Single `currentColor` fill; the mask
-  // reads as the background showing through, so it works on any panel colour.
+  // Raccoon head — rounded-triangle ears, cheeks tapering to a pointed snout,
+  // the pale bandit mask + dark eyes + snub nose cut from the silhouette.
+  // Single `currentColor` fill; the cut-outs read as the background showing
+  // through, so it works on any panel colour.
   export let size: number | string = 120;
   export let title = "RaccTrack";
 
@@ -10,7 +11,7 @@
 
 <svg
   class="rm"
-  viewBox="0 0 100 100"
+  viewBox="0 0 120 116"
   width={size}
   height={size}
   role="img"
@@ -18,21 +19,27 @@
 >
   <defs>
     <mask id={uid}>
-      <rect width="100" height="100" fill="#fff" />
+      <rect width="120" height="116" fill="#fff" />
+      <!-- bandit mask: band across the eyes, slight dip over the nose -->
       <path
-        d="M25 39 C20 44 21 54 28 56 C35 58 43 52 45 45 L55 45 C57 52 65 58 72 56 C79 54 80 44 75 39 C68 34 58 37 50 43 C42 37 32 34 25 39 Z"
+        d="M28 46 Q28 39 37 38 Q50 36 58 45 Q60 47 62 45 Q70 36 83 38
+           Q92 39 92 46 Q92 60 80 62 Q66 63 60 53 Q54 63 40 62 Q28 60 28 46 Z"
         fill="#000"
       />
-      <circle cx="37" cy="46" r="3.6" fill="#fff" />
-      <circle cx="63" cy="46" r="3.6" fill="#fff" />
-      <path d="M45.5 73 h9 l-3 6.5 a3 3 0 0 1 -3 0 z" fill="#000" />
+      <circle cx="45" cy="50" r="4.4" fill="#fff" />
+      <circle cx="75" cy="50" r="4.4" fill="#fff" />
+      <path d="M55 79 h10 l-3.5 7 a3.2 3.2 0 0 1 -3 0 z" fill="#000" />
     </mask>
   </defs>
   <g fill="currentColor" mask="url(#{uid})">
-    <path d="M18 5 C8 10 6 31 16 42 C25 30 31 23 42 19 C36 8 28 3 18 5 Z" />
-    <path d="M82 5 C92 10 94 31 84 42 C75 30 69 23 58 19 C64 8 72 3 82 5 Z" />
+    <!-- ears -->
+    <path d="M18 6 C24 20 32 30 44 34 C45 24 47 16 51 10 C41 3 28 0 18 6 Z" />
+    <path d="M102 6 C96 20 88 30 76 34 C75 24 73 16 69 10 C79 3 92 0 102 6 Z" />
+    <!-- head: wide cheeks tapering to a pointed snout -->
     <path
-      d="M50 11 C28 11 16 30 16 54 C16 79 31 95 50 95 C69 95 84 79 84 54 C84 30 72 11 50 11 Z"
+      d="M60 12 C42 12 31 18 25 30 C18 42 16 55 20 67 C24 81 34 95 48 104
+         C52 107 56 109 60 109 C64 109 68 107 72 104 C86 95 96 81 100 67
+         C104 55 102 42 95 30 C89 18 78 12 60 12 Z"
     />
   </g>
 </svg>
