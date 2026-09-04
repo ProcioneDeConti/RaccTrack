@@ -41,6 +41,14 @@ licenses noted; live services are queried at runtime and are not redistributed.
 - Geocoding (home location search): Photon by Komoot, data (c) OpenStreetMap
   contributors. https://photon.komoot.io/
 
+- Weather radar overlay (optional): RainViewer free tile API. Radar mosaics
+  from national meteorological services (NOAA/NWS and others).
+  https://www.rainviewer.com/
+
+- Local ADS-B receiver (optional): the app reads a dump1090-fa / readsb /
+  tar1090 aircraft.json served on the user's own network. Those projects are
+  not bundled or redistributed.
+
 - User-interface icons (src/lib/ui/Icon.svelte): path geometry from Lucide
   (https://lucide.dev), ISC License. Copyright (c) for portions of this code are
   held by Lucide Contributors 2022. Lucide is a fork of Feather (MIT, Copyright

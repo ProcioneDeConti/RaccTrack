@@ -217,6 +217,7 @@ export interface DlMessage {
 export interface MapLayers {
   airports: boolean;
   weather: boolean;
+  radar: boolean;
   airspace: boolean;
   rangeRings: boolean;
 }

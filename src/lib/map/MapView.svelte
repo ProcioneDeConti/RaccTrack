@@ -22,6 +22,7 @@
   import Icon from "../ui/Icon.svelte";
   import RaccoonMark from "../ui/RaccoonMark.svelte";
   import { addCoverageBoundary } from "./coverage";
+  import { latestRadar } from "./radar";
   import { makeTransformRequest } from "./tileProxy";
   import { Overlays } from "./overlays";
   import {
@@ -59,6 +60,7 @@
   let interactionsInstalled = false;
   let moveTimer: number | undefined;
   let trailTimer: number | undefined;
+  let radarTimer: number | undefined;
   let unsubGeo: (() => void) | undefined;
   let unsubSel: (() => void) | undefined;
   let unsubBasemap: (() => void) | undefined;
@@ -80,6 +82,7 @@
   let curLayers: MapLayers = {
     airports: false,
     weather: false,
+    radar: false,
     airspace: false,
     rangeRings: false,
   };
@@ -157,6 +160,11 @@
       }
     }
     appliedSel = hex;
+  }
+
+  async function refreshRadar() {
+    const snap = await latestRadar();
+    overlays?.setRadarFrame(snap?.tileUrl ?? null);
   }
 
   function refreshOverlays() {
@@ -667,13 +675,19 @@
       const rr = get(rangeRingsNm);
       overlays?.setRangeRings(get(home), rr, curLayers.rangeRings);
     };
+    let radarWasOn = false;
     unsubLayers = layers.subscribe((l) => {
       curLayers = l;
       overlays?.setVisibility(l);
       drawRings();
       refreshOverlays();
+      if (l.radar && !radarWasOn) void refreshRadar();
+      radarWasOn = l.radar;
     });
     unsubRings = rangeRingsNm.subscribe(drawRings);
+    radarTimer = window.setInterval(() => {
+      if (curLayers.radar) void refreshRadar();
+    }, 5 * 60 * 1000);
 
     // Home location: seed from settings (initial camera is already set above),
     // drop the marker, and react to later changes.
@@ -762,6 +776,7 @@
   onDestroy(() => {
     if (moveTimer) clearTimeout(moveTimer);
     if (trailTimer) clearInterval(trailTimer);
+    if (radarTimer) clearInterval(radarTimer);
     if (overlayTimer) clearTimeout(overlayTimer);
     if (styleSettleTimer) clearTimeout(styleSettleTimer);
     if (restoreBoundsTimer) clearTimeout(restoreBoundsTimer);

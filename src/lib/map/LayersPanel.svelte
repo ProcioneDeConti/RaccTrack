@@ -101,6 +101,7 @@
 <Panel title="Map layers" {onClose} width={230}>
   <label><input type="checkbox" checked={l.airports} on:change={() => toggle("airports")} /> Airports</label>
   <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
+  <label><input type="checkbox" checked={l.radar} on:change={() => toggle("radar")} /> Weather radar</label>
   <label><input type="checkbox" checked={l.airspace} on:change={() => toggle("airspace")} /> Airspace</label>
   <label class:disabled={!$home} title={$home ? "" : "Set a home location first"}>
     <input

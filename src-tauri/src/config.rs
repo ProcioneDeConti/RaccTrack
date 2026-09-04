@@ -63,6 +63,8 @@ pub struct MapLayers {
     #[serde(default)]
     pub weather: bool,
     #[serde(default)]
+    pub radar: bool,
+    #[serde(default)]
     pub airspace: bool,
     #[serde(default)]
     pub range_rings: bool,

@@ -21,6 +21,10 @@ import {
 } from "../theme/colors";
 
 const EMPTY = { type: "FeatureCollection", features: [] } as const;
+// 1x1 transparent PNG — the radar source needs *some* tile URL before the first
+// frame is fetched.
+const PLACEHOLDER_TILE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==";
 
 function airspacePaintColor(): any {
   const m: any[] = ["match", ["get", "category"]];
@@ -49,6 +53,17 @@ export class Overlays {
   /** Per-kind record of the last successful fetch, so panning back over an
    *  area we already have doesn't refetch. Cleared on a real style swap. */
   private fetched: Record<string, { bbox: Bbox; zb: number; at: number }> = {};
+
+  /** Current radar tile URL template — survives style swaps so a re-install
+   *  re-creates the source with the right frame. */
+  private radarUrl: string | null = null;
+
+  /** Point the radar layer at a new frame (or null before the first fetch). */
+  setRadarFrame(url: string | null) {
+    this.radarUrl = url;
+    const src = this.map.getSource("ov-radar") as any;
+    if (src?.setTiles) src.setTiles([url ?? PLACEHOLDER_TILE]);
+  }
 
   private zoomBucket(): number {
     const z = this.map.getZoom();
@@ -94,10 +109,27 @@ export class Overlays {
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
     }
+    if (!m.getSource("ov-radar")) {
+      m.addSource("ov-radar", {
+        type: "raster",
+        tiles: [this.radarUrl ?? PLACEHOLDER_TILE],
+        tileSize: 256,
+        attribution:
+          '<a href="https://www.rainviewer.com/" target="_blank">RainViewer</a>',
+      });
+    }
 
     const add = (layer: any) => {
       if (!m.getLayer(layer.id)) m.addLayer(layer, beforeId);
     };
+
+    // Radar sits right on top of the basemap, under every other overlay.
+    add({
+      id: "ov-radar",
+      type: "raster",
+      source: "ov-radar",
+      paint: { "raster-opacity": 0.55, "raster-fade-duration": 0 },
+    });
 
     add({
       id: "ov-airspace-fill",
@@ -228,6 +260,7 @@ export class Overlays {
         this.visState[id] = on;
       }
     };
+    set("ov-radar", layers.radar);
     set("ov-airspace-fill", layers.airspace);
     set("ov-airspace-line", layers.airspace);
     set("ov-airport-dot", layers.airports);

@@ -12,7 +12,11 @@
 
   $: filtersOn = !isDefault($filters);
   $: layersOn =
-    $layers.airports || $layers.weather || $layers.airspace || $layers.rangeRings;
+    $layers.airports ||
+    $layers.weather ||
+    $layers.radar ||
+    $layers.airspace ||
+    $layers.rangeRings;
 
   type Item = {
     id: string;

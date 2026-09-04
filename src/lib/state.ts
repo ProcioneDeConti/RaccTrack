@@ -24,6 +24,7 @@ export const goHomeSignal = writable(0);
 export const layers = writable<MapLayers>({
   airports: false,
   weather: false,
+  radar: false,
   airspace: false,
   rangeRings: false,
 });
