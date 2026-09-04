@@ -38,6 +38,10 @@ pub struct AppSettings {
     pub pinned: Vec<String>,
     #[serde(default = "default_true")]
     pub emergency_watch_enabled: bool,
+    #[serde(default = "default_true")]
+    pub history_enabled: bool,
+    #[serde(default = "default_history_days")]
+    pub history_retention_days: u32,
     pub tile_cache_enabled: bool,
     pub tile_cache_max_mb: u64,
     pub units: String, // "imperial" | "metric"
@@ -64,6 +68,9 @@ fn default_range_rings() -> Vec<f64> {
 fn default_true() -> bool {
     true
 }
+fn default_history_days() -> u32 {
+    30
+}
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -79,6 +86,8 @@ impl Default for AppSettings {
             range_rings_nm: default_range_rings(),
             pinned: Vec::new(),
             emergency_watch_enabled: true,
+            history_enabled: true,
+            history_retention_days: 30,
             tile_cache_enabled: false,
             tile_cache_max_mb: 500,
             units: "imperial".into(),
@@ -111,6 +120,7 @@ impl AppSettings {
         }
         self.poll_interval_ms = self.poll_interval_ms.clamp(1_000, 30_000);
         self.tile_cache_max_mb = self.tile_cache_max_mb.clamp(50, 8_000);
+        self.history_retention_days = self.history_retention_days.clamp(1, 3650);
         if self.units != "metric" {
             self.units = "imperial".into();
         }

@@ -9,8 +9,10 @@ use crate::app::AppState;
 use crate::config::AppSettings;
 use crate::enrich::AircraftDetail;
 use crate::geocode::GeoResult;
+use crate::ingest::model::Aircraft;
+use crate::ingest::normalize;
 use crate::region::Area;
-use crate::state::{AircraftDiff, TrailPoint};
+use crate::state::{AircraftDiff, AircraftEvent, TrailPoint};
 use crate::tiles::{DownloadProgress, TileCacheStats};
 use crate::poller::SourceStatus;
 use crate::util::now_ms;
@@ -43,17 +45,72 @@ pub async fn get_aircraft_detail(
     state: State<'_, AppState>,
     hex: String,
 ) -> CmdResult<AircraftDetail> {
-    let ac = state
-        .live
-        .get(&hex)
-        .ok_or_else(|| format!("aircraft {hex} not in view"))?;
+    let hex = hex.to_lowercase();
+    let ac = match state.live.get(&hex) {
+        Some(ac) => ac,
+        // Not in the viewport feed (e.g. an NA-wide emergency-squawk hit) —
+        // pull just this aircraft straight from a source by hex.
+        None => fetch_aircraft_by_hex(state.inner(), &hex)
+            .await
+            .ok_or_else(|| format!("no live data for {hex} right now"))?,
+    };
     let contact = state.settings.lock().contact.clone();
-    Ok(state.enricher.detail(ac, &contact).await)
+    let mut detail = state.enricher.detail(ac, &contact).await;
+    if let Some(info) = state.live.airborne(&hex) {
+        detail.airborne_since = Some(info.since_ms);
+        detail.saw_departure = info.saw_departure;
+    }
+    Ok(detail)
+}
+
+/// On-demand single-aircraft fetch, trying each source until one knows the hex.
+async fn fetch_aircraft_by_hex(state: &AppState, hex: &str) -> Option<Aircraft> {
+    for source in &state.sources {
+        match source.by_hex(hex).await {
+            Ok(raw) => {
+                if let Some(mut ac) = normalize(raw, source.name(), now_ms())
+                    .into_iter()
+                    .find(|a| a.hex == hex)
+                {
+                    state.enricher.fill_identity(&mut ac);
+                    return Some(ac);
+                }
+            }
+            Err(e) => tracing::debug!("by_hex {hex} via {}: {e}", source.name()),
+        }
+    }
+    None
 }
 
 #[tauri::command]
 pub fn get_trail(state: State<AppState>, hex: String) -> Vec<TrailPoint> {
     state.live.trail(&hex)
+}
+
+// --- flight-event history ---
+
+#[tauri::command]
+pub fn aircraft_history(state: State<AppState>, hex: String) -> CmdResult<Vec<AircraftEvent>> {
+    state
+        .history
+        .for_hex(&hex.to_lowercase(), 200)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn recent_events(
+    state: State<AppState>,
+    limit: Option<i64>,
+) -> CmdResult<Vec<AircraftEvent>> {
+    state
+        .history
+        .recent(limit.unwrap_or(300).clamp(1, 2000))
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn clear_history(state: State<AppState>) -> CmdResult<()> {
+    state.history.clear().map_err(err)
 }
 
 #[tauri::command]

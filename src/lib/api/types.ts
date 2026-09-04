@@ -111,6 +111,10 @@ export interface AircraftDetail {
   typeDetails: AcType | null;
   route: RouteInfo | null;
   photos: PhotoInfo[];
+  /** epoch ms first seen airborne this session (null if on the ground / unknown) */
+  airborneSince: number | null;
+  /** true when airborneSince is a witnessed departure, not just a lower bound */
+  sawDeparture: boolean;
 }
 
 export interface SourceStatus {
@@ -217,6 +221,28 @@ export interface MapLayers {
   rangeRings: boolean;
 }
 
+// Self-collected flight history. Mirrors `src-tauri/src/state.rs`.
+
+export type EventKind =
+  | "squawk"
+  | "emergency"
+  | "emergency_clear"
+  | "callsign"
+  | "takeoff"
+  | "landing"
+  | "alert";
+
+export interface AircraftEvent {
+  hex: string;
+  at: number; // epoch ms
+  kind: EventKind;
+  flight: string | null;
+  from: string | null;
+  to: string | null;
+  lat: number | null;
+  lon: number | null;
+}
+
 export type WatchKind =
   | "hex"
   | "registration"
@@ -266,6 +292,8 @@ export interface AppSettings {
   rangeRingsNm: number[];
   pinned: string[];
   emergencyWatchEnabled: boolean;
+  historyEnabled: boolean;
+  historyRetentionDays: number;
   tileCacheEnabled: boolean;
   tileCacheMaxMb: number;
   units: "imperial" | "metric";

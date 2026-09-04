@@ -15,6 +15,8 @@ use crate::db::Db;
 use crate::enrich::airports::Airports;
 use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
+use crate::history::History;
+use crate::ingest::AircraftSource;
 use crate::poller::SourceStatus;
 use crate::region::Area;
 use crate::state::LiveState;
@@ -23,8 +25,12 @@ use crate::weather::Weather;
 
 pub struct AppState {
     pub live: Arc<LiveState>,
+    /// Ingestion sources, shared with the poller — also used for on-demand
+    /// single-aircraft (`by_hex`) lookups from the detail command.
+    pub sources: Vec<Arc<dyn AircraftSource>>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
+    pub history: Arc<History>,
     pub tiles: Arc<TileCache>,
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,

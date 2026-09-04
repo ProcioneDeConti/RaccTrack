@@ -31,6 +31,7 @@
     { id: "filters", icon: "filter", label: "Filters", dot: filtersOn },
     { id: "layers", icon: "layers", label: "Map layers", dot: layersOn },
     { id: "watchlist", icon: "star", label: "Watchlist" },
+    { id: "events", icon: "activity", label: "Events & history" },
   ] satisfies Item[];
 </script>
 

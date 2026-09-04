@@ -8,6 +8,7 @@
     downloadTileArea,
     geocode,
     onDownloadProgress,
+    clearHistory,
     type TileCacheStats,
     type DownloadProgress,
   } from "../api/backend";
@@ -102,6 +103,10 @@
   async function clear() {
     await clearTileCache();
     await refreshCache();
+  }
+
+  async function wipeHistory() {
+    if (confirm("Delete all recorded flight history?")) await clearHistory();
   }
 
   async function downloadHere() {
@@ -229,6 +234,33 @@
         on:change={(e) => patch({ emergencyWatchEnabled: e.currentTarget.checked })}
       />
     </label>
+
+    <label class="row">
+      <span>Record flight history (viewed aircraft)</span>
+      <input
+        type="checkbox"
+        checked={s.historyEnabled}
+        on:change={(e) => patch({ historyEnabled: e.currentTarget.checked })}
+      />
+    </label>
+    {#if s.historyEnabled}
+      <label class="row">
+        Keep history for
+        <select
+          value={s.historyRetentionDays}
+          on:change={(e) => patch({ historyRetentionDays: +e.currentTarget.value })}
+        >
+          <option value={7}>7 days</option>
+          <option value={30}>30 days</option>
+          <option value={90}>90 days</option>
+          <option value={365}>1 year</option>
+        </select>
+      </label>
+      <div class="row">
+        <span class="muted">Recorded events</span>
+        <button on:click={wipeHistory}>Clear history</button>
+      </div>
+    {/if}
 
     <hr />
 

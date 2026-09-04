@@ -9,6 +9,7 @@ mod db;
 mod emergency_watch;
 mod enrich;
 mod geocode;
+mod history;
 mod ingest;
 mod notable;
 mod poller;
@@ -135,6 +136,17 @@ pub fn run() {
             ));
 
             let alerts = Arc::new(Alerts::new(db.clone()));
+            let history = Arc::new(crate::history::History::new(db.clone()));
+            {
+                // Drop events past the retention window on startup.
+                let days = settings.lock().history_retention_days as i64;
+                let cutoff = crate::util::now_ms() - days * 86_400_000;
+                if let Ok(n) = history.prune(cutoff) {
+                    if n > 0 {
+                        tracing::info!("history: pruned {n} events older than {days}d");
+                    }
+                }
+            }
             let geocoder = Arc::new(Geocoder::new(db.clone(), http.clone()));
             let weather = Arc::new(Weather::new(db.clone(), http.clone()));
             let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
@@ -157,8 +169,10 @@ pub fn run() {
 
             app.manage(AppState {
                 live: live.clone(),
+                sources: sources.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
+                history: history.clone(),
                 tiles: tiles.clone(),
                 geocoder: geocoder.clone(),
                 weather: weather.clone(),
@@ -172,11 +186,15 @@ pub fn run() {
                 status: status.clone(),
             });
 
-            let ewatch = Arc::new(EmergencyWatch::new(http.clone(), settings.clone()));
+            let ewatch = Arc::new(EmergencyWatch::new(
+                http.clone(),
+                settings.clone(),
+                history.clone(),
+            ));
             tauri::async_runtime::spawn(ewatch.run(handle.clone()));
 
             let poller = Arc::new(Poller::new(
-                live, enricher, alerts, sources, settings, viewport, status,
+                live, enricher, alerts, history, sources, settings, viewport, status,
             ));
             tauri::async_runtime::spawn(poller.run(handle));
 
@@ -188,6 +206,9 @@ pub fn run() {
             commands::get_aircraft_detail,
             commands::get_trail,
             commands::get_all_trails,
+            commands::aircraft_history,
+            commands::recent_events,
+            commands::clear_history,
             commands::get_source_status,
             commands::log_frontend,
             commands::geocode,

@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AircraftDiff,
   AircraftDetail,
+  AircraftEvent,
   AlertEvent,
   AppSettings,
   GeoResult,
@@ -28,6 +29,18 @@ export function getAircraftDetail(hex: string): Promise<AircraftDetail> {
 
 export function getTrail(hex: string): Promise<TrailPoint[]> {
   return invoke("get_trail", { hex });
+}
+
+export function aircraftHistory(hex: string): Promise<AircraftEvent[]> {
+  return invoke("aircraft_history", { hex });
+}
+
+export function recentEvents(limit?: number): Promise<AircraftEvent[]> {
+  return invoke("recent_events", { limit });
+}
+
+export function clearHistory(): Promise<void> {
+  return invoke("clear_history");
 }
 
 export function getAllTrails(): Promise<Record<string, TrailPoint[]>> {
@@ -180,6 +193,12 @@ export function onDiff(cb: (d: AircraftDiff) => void): Promise<UnlistenFn> {
 
 export function onAlert(cb: (a: AlertEvent) => void): Promise<UnlistenFn> {
   return listen<AlertEvent>("alert", (e) => cb(e.payload));
+}
+
+export function onAircraftEvent(
+  cb: (e: AircraftEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<AircraftEvent>("aircraft-event", (e) => cb(e.payload));
 }
 
 export function onSourceStatus(
