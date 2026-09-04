@@ -4,6 +4,12 @@
   import { airportInfo, stationWx } from "../api/backend";
   import type { AirportInfo, StationWx } from "../api/types";
   import { altitude } from "../format";
+  import { decodeMetar, decodeTaf } from "../wx/metar";
+
+  let showRaw = false;
+
+  $: decoded = wx?.metar ? decodeMetar(wx.metar) : null;
+  $: taf = wx?.tafRaw ? decodeTaf(wx.tafRaw) : null;
 
   let info: AirportInfo | null = null;
   let wx: StationWx | null = null;
@@ -151,12 +157,50 @@
       {/if}
 
       <section>
-        <h4>Weather</h4>
+        <h4>
+          Weather
+          {#if wx?.metar}
+            <button class="rawtoggle" on:click={() => (showRaw = !showRaw)}>
+              {showRaw ? "hide raw" : "raw"}
+            </button>
+          {/if}
+        </h4>
         {#if wx === null}
           <p class="muted">Loading…</p>
         {:else if wx.metar}
-          <p class="raw">{wx.metar.raw}</p>
-          {#if wx.tafRaw}<p class="raw taf">{wx.tafRaw}</p>{/if}
+          {#if decoded}
+            <dl class="decoded">
+              {#each decoded.rows as row}
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              {/each}
+            </dl>
+            {#each decoded.flags as f}
+              <p class="wxflag">{f}</p>
+            {/each}
+          {/if}
+          {#if showRaw}
+            <p class="raw">{wx.metar.raw}</p>
+          {/if}
+
+          {#if taf && taf.periods.length}
+            <h5>
+              Forecast (TAF)
+              {#if taf.valid}<span class="muted">· valid {taf.valid}</span>{/if}
+            </h5>
+            {#each taf.periods as p}
+              <div class="tafp">
+                <div class="tafhead">{p.heading}</div>
+                {#each p.lines as ln}<div class="tafline">{ln}</div>{/each}
+                {#if p.extra.length}
+                  <div class="tafline muted">{p.extra.join(" ")}</div>
+                {/if}
+              </div>
+            {/each}
+            {#if showRaw}<p class="raw taf">{wx.tafRaw}</p>{/if}
+          {:else if wx.tafRaw && showRaw}
+            <p class="raw taf">{wx.tafRaw}</p>
+          {/if}
         {:else}
           <p class="muted">
             No weather station at this airport — nearest METAR shown on the map.
@@ -230,6 +274,9 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
   }
   .rw,
   .fq {
@@ -265,5 +312,53 @@
   }
   .taf {
     color: var(--text-dim);
+  }
+  .rawtoggle {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 9px;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 1px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  dl.decoded {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 0 0 4px;
+    font-size: 12px;
+  }
+  dl.decoded dt {
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  dl.decoded dd {
+    margin: 0;
+  }
+  .wxflag {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin: 0;
+  }
+  h5 {
+    margin: 10px 0 4px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .tafp {
+    margin: 0 0 6px;
+    font-size: 12px;
+  }
+  .tafhead {
+    font-weight: 600;
+  }
+  .tafline {
+    padding-left: 10px;
   }
 </style>
