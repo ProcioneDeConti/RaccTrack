@@ -20,6 +20,7 @@
   } from "./style";
   import { registerAircraftIcons } from "./icons";
   import Icon from "../ui/Icon.svelte";
+  import RaccoonMark from "../ui/RaccoonMark.svelte";
   import { addCoverageBoundary } from "./coverage";
   import { makeTransformRequest } from "./tileProxy";
   import { Overlays } from "./overlays";
@@ -797,6 +798,14 @@
 </script>
 
 <div class="map" bind:this={container}></div>
+
+{#if !mapError && $aircraftGeoJson.features.length === 0}
+  <div class="empty-mark">
+    <RaccoonMark size={120} />
+    <p>No aircraft in view — pan the map or wait for the next sweep.</p>
+  </div>
+{/if}
+
 {#if $followHex}
   <button class="follow-chip" on:click={() => followHex.set(null)}>
     <Icon name="crosshair" size={13} />
@@ -811,6 +820,29 @@
   .map {
     position: absolute;
     inset: 0;
+  }
+  .empty-mark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -55%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+    z-index: 4;
+    color: var(--text-dim);
+    text-align: center;
+  }
+  .empty-mark :global(.rm) {
+    opacity: 0.13;
+  }
+  .empty-mark p {
+    margin: 0;
+    font-size: 11px;
+    opacity: 0.75;
+    max-width: 240px;
   }
   .map-error {
     position: absolute;

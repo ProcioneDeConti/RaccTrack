@@ -9,6 +9,7 @@
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import EventsPanel from "./lib/history/EventsPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
+  import AboutPanel from "./lib/about/AboutPanel.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import AlertToast from "./lib/watchlist/AlertToast.svelte";
   import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
@@ -43,7 +44,8 @@
     | "layers"
     | "watchlist"
     | "events"
-    | "settings";
+    | "settings"
+    | "about";
 
   let panel: PanelId = "none";
   let notificationsEnabled = true;
@@ -137,6 +139,8 @@
       <EventsPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
+    {:else if panel === "about"}
+      <AboutPanel onClose={close} />
     {/if}
 
     <DetailPanel />

@@ -71,6 +71,15 @@
     >
       <Icon name="settings" size={19} />
     </button>
+    <button
+      class:active={active === "about"}
+      title="About RaccTrack"
+      aria-label="About RaccTrack"
+      aria-pressed={active === "about"}
+      on:click={() => dispatch("select", "about")}
+    >
+      <Icon name="info" size={19} />
+    </button>
   </div>
 </nav>
 

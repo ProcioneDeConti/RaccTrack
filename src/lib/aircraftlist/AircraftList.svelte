@@ -175,7 +175,7 @@
       </tbody>
     </table>
     {#if rows.length === 0}
-      <Message kind="empty">No aircraft in view.</Message>
+      <Message kind="empty" mascot>No aircraft in view.</Message>
     {/if}
   </div>
 </Panel>
