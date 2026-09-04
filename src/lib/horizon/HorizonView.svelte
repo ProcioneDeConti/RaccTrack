@@ -59,6 +59,32 @@
   const yFor = (elevDeg: number) =>
     RIBBON_H + PAD + (WIN_H - 6) * (1 - elevationToFrac(elevDeg));
 
+  const SUN_RAYS = [0, 45, 90, 135, 180, 225, 270, 315];
+
+  /** Where to draw a sky body in the window: its (x, y), or clamped to an edge
+   *  with `off` set when it's outside the field of view. */
+  function bodyScreen(azimuth: number, elevation: number) {
+    const y = yFor(elevation);
+    const x = bearingToX(azimuth, center, width);
+    if (x != null) return { x, y, off: false };
+    return { x: bearingDelta(azimuth, center) > 0 ? width - 9 : 9, y, off: true };
+  }
+
+  /** SVG path for the Moon's lit portion, radius `r`, illuminated fraction `k`,
+   *  lit limb on the right when `litRight`. Centred on the origin. */
+  function moonPath(r: number, k: number, litRight: boolean): string {
+    const kk = Math.max(0.03, Math.min(0.97, k));
+    const ax = (r * Math.abs(1 - 2 * kk)).toFixed(2);
+    const gibbous = kk > 0.5;
+    const limb = litRight ? 1 : 0;
+    const term = litRight ? (gibbous ? 1 : 0) : gibbous ? 0 : 1;
+    return `M 0 ${-r} A ${r} ${r} 0 0 ${limb} 0 ${r} A ${ax} ${r} 0 0 ${term} 0 ${-r} Z`;
+  }
+
+  $: litRight =
+    $horizonBodies != null &&
+    bearingDelta($horizonBodies.sun.azimuth, $horizonBodies.moon.azimuth) > 0;
+
   // window azimuth ticks: every 15°, spanning a little past the edges
   $: winTicks = (() => {
     const out: { b: number; x: number; label: string | null }[] = [];
@@ -141,20 +167,24 @@
             <circle cx={x} cy={RIBBON_H - 3} r="2" fill={t.color} />
           {/each}
           {#if $horizonBodies && $horizonBodies.sun.elevation > -2}
-            <circle
-              cx={width / 2 + (bearingDelta($horizonBodies.sun.azimuth, center) / 360) * width}
-              cy={RIBBON_H / 2}
-              r="3"
-              class="sun"
-            />
+            <g
+              class="rbody sun"
+              transform="translate({width / 2 + (bearingDelta($horizonBodies.sun.azimuth, center) / 360) * width} {RIBBON_H / 2})"
+            >
+              {#each SUN_RAYS as a}
+                <line class="ray" x1="0" y1="-3.4" x2="0" y2="-4.7" transform="rotate({a})" />
+              {/each}
+              <circle r="2.6" />
+            </g>
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -2}
-            <circle
-              cx={width / 2 + (bearingDelta($horizonBodies.moon.azimuth, center) / 360) * width}
-              cy={RIBBON_H / 2}
-              r="3"
-              class="moon"
-            />
+            <g
+              class="rbody moon"
+              transform="translate({width / 2 + (bearingDelta($horizonBodies.moon.azimuth, center) / 360) * width} {RIBBON_H / 2})"
+            >
+              <circle r="3" class="moon-dark" />
+              <path class="moon-lit" d={moonPath(3, $horizonBodies.moonIllum, litRight)} />
+            </g>
           {/if}
           <path
             d="M{width / 2 - 5} 0 L{width / 2 + 5} 0 L{width / 2} 6 Z"
@@ -184,22 +214,43 @@
           {/each}
 
           {#if $horizonBodies && $horizonBodies.sun.elevation > -1}
-            {@const sx = bearingToX($horizonBodies.sun.azimuth, center, width)}
-            {#if sx != null}
-              <circle cx={sx} cy={yFor($horizonBodies.sun.elevation)} r="7" class="sun" />
-            {/if}
+            {@const s = bodyScreen(
+              $horizonBodies.sun.azimuth,
+              $horizonBodies.sun.elevation,
+            )}
+            <g class="body sun" class:off={s.off} transform="translate({s.x} {s.y})">
+              {#if s.off}
+                <path
+                  class="edge"
+                  d={s.x < width / 2 ? "M4 -5 L-3 0 L4 5" : "M-4 -5 L3 0 L-4 5"}
+                />
+              {:else}
+                {#each SUN_RAYS as a}
+                  <line class="ray" x1="0" y1="-8" x2="0" y2="-11" transform="rotate({a})" />
+                {/each}
+                <circle r="5.5" />
+              {/if}
+              <text y="-15">Sun</text>
+            </g>
           {/if}
           {#if $horizonBodies && $horizonBodies.moon.elevation > -1}
-            {@const mx = bearingToX($horizonBodies.moon.azimuth, center, width)}
-            {#if mx != null}
-              <circle
-                cx={mx}
-                cy={yFor($horizonBodies.moon.elevation)}
-                r="6"
-                class="moon"
-                style="opacity:{0.3 + 0.6 * $horizonBodies.moonIllum}"
-              />
-            {/if}
+            {@const m = bodyScreen(
+              $horizonBodies.moon.azimuth,
+              $horizonBodies.moon.elevation,
+            )}
+            <g class="body moon" class:off={m.off} transform="translate({m.x} {m.y})">
+              {#if m.off}
+                <path
+                  class="edge"
+                  d={m.x < width / 2 ? "M4 -5 L-3 0 L4 5" : "M-4 -5 L3 0 L-4 5"}
+                />
+              {:else}
+                <circle r="6" class="moon-dark" />
+                <path class="moon-lit" d={moonPath(6, $horizonBodies.moonIllum, litRight)} />
+                <circle r="6" class="moon-ring" />
+              {/if}
+              <text y="-15">Moon</text>
+            </g>
           {/if}
 
           {#each $horizonTargets as t (t.hex)}
@@ -355,11 +406,43 @@
   .azlab {
     text-anchor: middle;
   }
-  .sun {
+  .body text {
+    fill: var(--text);
+    font-size: 9px;
+    font-weight: 600;
+    text-anchor: middle;
+    paint-order: stroke;
+    stroke: var(--bg-panel);
+    stroke-width: 3;
+  }
+  .sun circle {
     fill: #f5c518;
   }
-  .moon {
-    fill: #cdd6e0;
+  .sun .ray {
+    stroke: #f5c518;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+  .moon-dark {
+    fill: #2b3442;
+  }
+  .moon-lit {
+    fill: #eef2f7;
+  }
+  .moon-ring {
+    fill: none;
+    stroke: #8b96a5;
+    stroke-width: 0.75;
+  }
+  .body .edge {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .body.off text {
+    fill: var(--text-dim);
   }
   .tgt {
     cursor: pointer;
