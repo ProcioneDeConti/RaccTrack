@@ -27,6 +27,13 @@
   let currentHex: string | null = null;
   let photoIdx = 0;
 
+  // Route-progress memo cache (see memoProgress below) — declared up here
+  // because selectedHex.subscribe fires synchronously and resets them.
+  let progCache:
+    | { sig: string; value: ReturnType<typeof computeProgress> }
+    | null = null;
+  let lastLine: unknown = null;
+
   const unsub = selectedHex.subscribe((hex) => {
     currentHex = hex;
     detail = null;
@@ -72,10 +79,8 @@
   // --- route progress ---
   // computeProgress calls gcPath(…,96) + projectOntoTrack; `live` is a fresh
   // object every 3 s diff, so memoise on the inputs that actually move the
-  // needle (route endpoints + the aircraft's position/speed).
-  let progCache: { sig: string; value: ReturnType<typeof computeProgress> } | null = null;
-  let lastLine: unknown = null;
-
+  // needle (route endpoints + the aircraft's position/speed). Cache vars are
+  // declared near the top (selectedHex.subscribe resets them on init).
   $: prog = memoProgress(detail, live);
   $: {
     const line = prog?.line ?? null;
