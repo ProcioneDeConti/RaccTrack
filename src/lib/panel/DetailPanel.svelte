@@ -10,6 +10,7 @@
   } from "../state";
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
+  import DatalinkSection from "./DatalinkSection.svelte";
   import {
     altitude,
     speed,
@@ -335,6 +336,12 @@
         <dt>Feed</dt><dd>{live?.source ?? "—"}</dd>
       </dl>
     </section>
+
+    {#if currentHex}
+      {#key currentHex}
+        <DatalinkSection hex={currentHex} />
+      {/key}
+    {/if}
 
     <footer>
       <div class="btnrow">

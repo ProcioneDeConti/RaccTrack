@@ -10,6 +10,7 @@ use crate::airspace::Airspace;
 use crate::alerts::Alerts;
 use crate::charts::Charts;
 use crate::config::AppSettings;
+use crate::datalink::Datalink;
 use crate::db::Db;
 use crate::enrich::airports::Airports;
 use crate::enrich::Enricher;
@@ -29,6 +30,7 @@ pub struct AppState {
     pub weather: Arc<Weather>,
     pub airspace: Arc<Airspace>,
     pub charts: Arc<Charts>,
+    pub datalink: Arc<Datalink>,
     pub airports: Arc<ArcSwap<Airports>>,
     pub db: Arc<Db>,
     pub settings: Arc<Mutex<AppSettings>>,

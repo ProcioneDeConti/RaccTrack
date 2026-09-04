@@ -164,6 +164,16 @@ pub async fn chart_pdf(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+// --- aircraft datalink (airframes.io) ---
+
+#[tauri::command]
+pub async fn datalink_for(
+    state: State<'_, AppState>,
+    hex: String,
+) -> CmdResult<Vec<crate::datalink::DlMessage>> {
+    state.datalink.for_hex(&hex).await.map_err(err)
+}
+
 #[tauri::command]
 pub fn open_external(app: AppHandle, url: String) -> CmdResult<()> {
     if !url.starts_with("https://") {

@@ -93,6 +93,14 @@ export function openExternal(url: string): Promise<void> {
   return invoke("open_external", { url });
 }
 
+// --- aircraft datalink (airframes.io) ---
+
+import type { DlMessage } from "./types";
+
+export function datalinkFor(hex: string): Promise<DlMessage[]> {
+  return invoke("datalink_for", { hex });
+}
+
 // --- presets ---
 
 import type { Preset } from "./types";

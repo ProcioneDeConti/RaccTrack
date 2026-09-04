@@ -4,6 +4,7 @@ mod app;
 mod charts;
 mod commands;
 mod config;
+mod datalink;
 mod db;
 mod emergency_watch;
 mod enrich;
@@ -33,6 +34,7 @@ use crate::enrich::{
 };
 use crate::airspace::Airspace;
 use crate::charts::Charts;
+use crate::datalink::Datalink;
 use crate::emergency_watch::EmergencyWatch;
 use crate::geocode::Geocoder;
 use crate::ingest::{AircraftSource, HttpV2Source};
@@ -137,6 +139,7 @@ pub fn run() {
             let weather = Arc::new(Weather::new(db.clone(), http.clone()));
             let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
             let charts = Arc::new(Charts::new(db.clone(), http.clone()));
+            let datalink = Arc::new(Datalink::new(db.clone(), http.clone()));
             let tiles = Arc::new(TileCache::new(
                 db.clone(),
                 http.clone(),
@@ -161,6 +164,7 @@ pub fn run() {
                 weather: weather.clone(),
                 airspace: airspace.clone(),
                 charts: charts.clone(),
+                datalink: datalink.clone(),
                 airports: airports.clone(),
                 db: db.clone(),
                 settings: settings.clone(),
@@ -206,6 +210,7 @@ pub fn run() {
             commands::airport_charts,
             commands::chart_pdf,
             commands::open_external,
+            commands::datalink_for,
         ])
         .build(tauri::generate_context!())
         .expect("build tauri app")

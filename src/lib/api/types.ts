@@ -197,6 +197,19 @@ export interface ChartSet {
   charts: ChartRef[];
 }
 
+// Aircraft datalink messages from airframes.io. Mirrors `src-tauri/src/datalink.rs`.
+
+export interface DlMessage {
+  time: number; // epoch ms, 0 if unknown
+  kind: string; // ACARS | VDL2 | HFDL | SATCOM
+  label: string | null;
+  labelDesc: string | null;
+  text: string | null;
+  freqMhz: number | null;
+  station: string | null;
+  route: string | null; // "KORD → KDSM"
+}
+
 export interface MapLayers {
   airports: boolean;
   weather: boolean;
