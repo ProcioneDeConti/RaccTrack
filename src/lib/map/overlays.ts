@@ -395,10 +395,11 @@ export class Overlays {
     const z = this.map.getZoom();
     for (const { el, lat, radiusM } of this.fenceMarkers) {
       const mpp = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / 2 ** z;
-      // Cap the element size — browsers fail to rasterize a layer past the GPU
-      // texture limit (~16k px). Way past that you're deep inside the fence and
-      // its edge is off-screen anyway.
-      const d = Math.min((2 * radiusM) / mpp, 12000);
+      // Cap at the browser's composited-layer limit (~16384 px on desktop GPUs;
+      // maplibre's marker transform forces compositing). Only fences wider than
+      // ~15 nm at the max zoom of 15 hit this, and only their off-screen edge is
+      // affected.
+      const d = Math.min((2 * radiusM) / mpp, 16000);
       el.style.width = `${d}px`;
       el.style.height = `${d}px`;
     }
