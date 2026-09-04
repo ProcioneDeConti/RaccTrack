@@ -187,13 +187,3 @@ export function iconKindFor(
   if (t && looksLight(t)) return "light";
   return t ? "jet" : "light";
 }
-
-// Altitude bands (feet) -> icon color.
-export function altColor(altBaro: number | null, onGround: boolean): string {
-  if (onGround || altBaro === null) return "#9aa0a6";
-  if (altBaro < 10000) return "#7ad151";
-  if (altBaro < 20000) return "#f9c74f";
-  if (altBaro < 30000) return "#f3722c";
-  if (altBaro < 40000) return "#e63946";
-  return "#b5179e";
-}

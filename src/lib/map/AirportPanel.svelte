@@ -6,6 +6,10 @@
   import { altitude } from "../format";
   import { decodeMetar, decodeTaf } from "../wx/metar";
   import Icon from "../ui/Icon.svelte";
+  import {
+    FLIGHT_CATEGORY_COLORS,
+    FLIGHT_CATEGORY_FALLBACK,
+  } from "../theme/colors";
 
   let showRaw = false;
 
@@ -54,13 +58,6 @@
       label: info.name,
     });
   }
-
-  const catColor: Record<string, string> = {
-    VFR: "#3fb950",
-    MVFR: "#3b82f6",
-    IFR: "#ef4444",
-    LIFR: "#d946ef",
-  };
 
   const FREQ_NAMES: Record<string, string> = {
     TWR: "Tower",
@@ -111,7 +108,8 @@
         {#if wx?.metar?.flightCategory}
           <span
             class="cat"
-            style="background:{catColor[wx.metar.flightCategory] ?? '#888'}"
+            style="background:{FLIGHT_CATEGORY_COLORS[wx.metar.flightCategory] ??
+              FLIGHT_CATEGORY_FALLBACK}"
             >{wx.metar.flightCategory}</span
           >
         {/if}

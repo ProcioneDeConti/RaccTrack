@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import { datalinkFor } from "../api/backend";
   import type { DlMessage } from "../api/types";
+  import { ACCENT } from "../theme/colors";
 
   export let hex: string;
 
@@ -11,8 +12,10 @@
   let msgs: DlMessage[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  // Datalink protocol → chip colour (a palette of its own — not the altitude
+  // scale, though a couple of hues overlap).
   const KIND_COLOR: Record<string, string> = {
-    ACARS: "#4c9be8",
+    ACARS: ACCENT,
     VDL2: "#7ad151",
     HFDL: "#f9c74f",
     SATCOM: "#b5179e",

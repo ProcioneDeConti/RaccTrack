@@ -3,6 +3,7 @@
   import { updateSettings } from "../api/backend";
   import type { MapLayers } from "../api/types";
   import Icon from "../ui/Icon.svelte";
+  import { AIRSPACE_STYLE, FLIGHT_CATEGORY_COLORS } from "../theme/colors";
 
   let open = false;
 
@@ -17,29 +18,31 @@
   $: l = $layers;
   $: anyOn = l.airports || l.weather || l.airspace || l.rangeRings;
 
+  // `color` is pulled from the shared theme palette (src/lib/theme/colors.ts);
+  // only the label/tooltip copy lives here.
   const WX_LEGEND = [
     {
       abbr: "VFR",
       name: "Visual",
-      color: "#3fb950",
+      color: FLIGHT_CATEGORY_COLORS.VFR,
       tip: "Visual Flight Rules — ceiling greater than 3,000 ft AGL and visibility greater than 5 statute miles.",
     },
     {
       abbr: "MVFR",
       name: "Marginal",
-      color: "#3b82f6",
+      color: FLIGHT_CATEGORY_COLORS.MVFR,
       tip: "Marginal VFR — ceiling 1,000–3,000 ft AGL and/or visibility 3–5 statute miles.",
     },
     {
       abbr: "IFR",
       name: "Instrument",
-      color: "#ef4444",
+      color: FLIGHT_CATEGORY_COLORS.IFR,
       tip: "Instrument Flight Rules — ceiling 500–1,000 ft AGL and/or visibility 1–3 statute miles.",
     },
     {
       abbr: "LIFR",
       name: "Low IFR",
-      color: "#d946ef",
+      color: FLIGHT_CATEGORY_COLORS.LIFR,
       tip: "Low IFR — ceiling below 500 ft AGL and/or visibility below 1 statute mile.",
     },
   ];
@@ -48,49 +51,49 @@
     {
       abbr: "B",
       name: "Class B",
-      color: "#3b82f6",
+      color: AIRSPACE_STYLE.CLASS_B.color,
       tip: "Class B — the busiest terminal airspace, around major airports (surface up to ~10,000 ft MSL). ATC clearance required to enter.",
     },
     {
       abbr: "C",
       name: "Class C",
-      color: "#d946ef",
+      color: AIRSPACE_STYLE.CLASS_C.color,
       tip: "Class C — moderately busy terminal airspace with an operating control tower and radar. Two-way radio contact required before entry.",
     },
     {
       abbr: "D",
       name: "Class D",
-      color: "#60a5fa",
+      color: AIRSPACE_STYLE.CLASS_D.color,
       tip: "Class D — airspace around an airport with an operating control tower (typically to ~2,500 ft AGL). Two-way radio contact required.",
     },
     {
       abbr: "E",
       name: "Class E",
-      color: "#a78bfa",
+      color: AIRSPACE_STYLE.CLASS_E.color,
       tip: "Class E — controlled airspace that isn't A/B/C/D. No entry requirements for VFR flight; IFR needs a clearance.",
     },
     {
       abbr: "Mode C",
       name: "veil",
-      color: "#94a3b8",
+      color: AIRSPACE_STYLE.MODE_C.color,
       tip: "Mode C veil — 30 nm ring around a Class B airport within which a transponder with altitude reporting is required.",
     },
     {
       abbr: "MOA",
       name: "Military ops",
-      color: "#fb923c",
+      color: AIRSPACE_STYLE.MOA.color,
       tip: "Military Operations Area — military training activity. VFR traffic is permitted; exercise extreme caution when active.",
     },
     {
       abbr: "R / P / W",
       name: "Restricted etc.",
-      color: "#ef4444",
+      color: AIRSPACE_STYLE.RESTRICTED.color,
       tip: "Restricted, Prohibited, and Warning areas — hazards to aircraft (weapons, airspace security). Entry is restricted, forbidden, or advised against.",
     },
     {
       abbr: "A",
       name: "Alert",
-      color: "#eab308",
+      color: AIRSPACE_STYLE.ALERT.color,
       tip: "Alert Area — high volume of pilot training or unusual aerial activity. Not regulatory; all traffic shares responsibility for collision avoidance.",
     },
   ];

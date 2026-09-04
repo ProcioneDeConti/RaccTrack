@@ -4,6 +4,7 @@
 
 import type { Map as MlMap } from "maplibre-gl";
 import { NA_BOUNDS } from "./region";
+import { CAUTION_GOLD, CAUTION_GREY } from "../theme/colors";
 
 const STRIPE = 16;
 
@@ -13,9 +14,9 @@ function stripeImage(): ImageData {
   c.width = STRIPE;
   c.height = STRIPE;
   const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "#d4a017";
+  ctx.fillStyle = CAUTION_GOLD;
   ctx.fillRect(0, 0, STRIPE, STRIPE);
-  ctx.strokeStyle = "#1b1b1b";
+  ctx.strokeStyle = CAUTION_GREY;
   ctx.lineWidth = STRIPE / 2;
   ctx.beginPath();
   ctx.moveTo(-STRIPE, STRIPE);

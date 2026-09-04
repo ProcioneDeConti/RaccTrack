@@ -13,26 +13,26 @@ import type { Airport, MapLayers, Metar } from "../api/types";
 import type { HomeLocation } from "../api/types";
 import { airportsIn, metarsIn, airspaceIn } from "../api/backend";
 import { selectedAirport, selectedHex } from "../state";
+import {
+  AIRSPACE_STYLE,
+  AIRSPACE_FALLBACK,
+  FLIGHT_CATEGORY_COLORS,
+  FLIGHT_CATEGORY_FALLBACK,
+} from "../theme/colors";
 
 const EMPTY = { type: "FeatureCollection", features: [] } as const;
-
-const AIRSPACE_STYLE: Record<string, { color: string; dash?: number[] }> = {
-  CLASS_B: { color: "#3b82f6" },
-  CLASS_C: { color: "#d946ef" },
-  CLASS_D: { color: "#60a5fa", dash: [3, 2] },
-  CLASS_E: { color: "#a78bfa", dash: [1, 2] },
-  MODE_C: { color: "#94a3b8", dash: [1, 3] },
-  MOA: { color: "#fb923c", dash: [4, 2] },
-  RESTRICTED: { color: "#ef4444" },
-  PROHIBITED: { color: "#ef4444" },
-  WARNING: { color: "#ef4444", dash: [4, 2] },
-  ALERT: { color: "#eab308", dash: [4, 2] },
-};
 
 function airspacePaintColor(): any {
   const m: any[] = ["match", ["get", "category"]];
   for (const [k, v] of Object.entries(AIRSPACE_STYLE)) m.push(k, v.color);
-  m.push("#64748b");
+  m.push(AIRSPACE_FALLBACK);
+  return m;
+}
+
+function fltCatCircleColor(): any {
+  const m: any[] = ["match", ["get", "fltCat"]];
+  for (const [k, v] of Object.entries(FLIGHT_CATEGORY_COLORS)) m.push(k, v);
+  m.push(FLIGHT_CATEGORY_FALLBACK);
   return m;
 }
 
@@ -142,19 +142,7 @@ export class Overlays {
           3.5,
           2,
         ],
-        "circle-color": [
-          "match",
-          ["get", "fltCat"],
-          "VFR",
-          "#3fb950",
-          "MVFR",
-          "#3b82f6",
-          "IFR",
-          "#ef4444",
-          "LIFR",
-          "#d946ef",
-          "#c9d1d9",
-        ],
+        "circle-color": fltCatCircleColor(),
         "circle-stroke-color": "#0d1117",
         "circle-stroke-width": 1,
       },
@@ -310,7 +298,7 @@ export class Overlays {
   private airspacePopup(lngLat: any, f: MapGeoJSONFeature) {
     const p = f.properties ?? {};
     const cat = String(p.category ?? "");
-    const color = AIRSPACE_STYLE[cat]?.color ?? "#94a3b8";
+    const color = AIRSPACE_STYLE[cat]?.color ?? AIRSPACE_FALLBACK;
     const pretty = cat.replace(/^CLASS_/, "Class ").replace(/_/g, " ");
     const alt =
       p.lower || p.upper ? `${p.lower ?? "SFC"} – ${p.upper ?? "?"}` : "";

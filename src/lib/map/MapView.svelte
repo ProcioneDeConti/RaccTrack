@@ -41,6 +41,15 @@
   import { setViewport, getTrail, getSettings } from "../api/backend";
   import type { TrailPoint, HomeLocation, MapLayers } from "../api/types";
   import { get } from "svelte/store";
+  import { ACCENT, EMERGENCY, ALT_GRADIENT } from "../theme/colors";
+
+  // Aircraft label / outline colours, per basemap brightness. Declared once
+  // here because they're applied both at layer creation and again after a
+  // live `setStyle()` (the layer survives, its paint props don't).
+  const LABEL = {
+    dark: { outline: "#f4f7fb", text: "#e6edf3", halo: "#0e1116" },
+    light: { outline: "#10141a", text: "#1c1c1c", halo: "#ffffff" },
+  } as const;
 
   let container: HTMLDivElement;
   let map: MlMap | undefined;
@@ -276,6 +285,7 @@
     }
 
     const dark = themeFor(activeBasemap).dark;
+    const lab = dark ? LABEL.dark : LABEL.light;
     const iconSize: any = [
       "interpolate",
       ["linear"],
@@ -310,7 +320,7 @@
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-width": 2.5,
-          "line-color": "#4c9be8",
+          "line-color": ACCENT,
           "line-opacity": 0.9,
         },
       });
@@ -327,14 +337,7 @@
             "interpolate",
             ["linear"],
             ["get", "alt"],
-            0,
-            "#7ad151",
-            15000,
-            "#f9c74f",
-            30000,
-            "#f3722c",
-            42000,
-            "#b5179e",
+            ...ALT_GRADIENT.flatMap(([ft, col]) => [ft, col]),
           ],
           "line-opacity": 0.85,
         },
@@ -352,7 +355,7 @@
         source: "aircraft",
         paint: {
           "circle-radius": ["case", selected, 15, emerg, 13, 0],
-          "circle-color": ["case", emerg, "#ff3b30", "#4c9be8"],
+          "circle-color": ["case", emerg, EMERGENCY, ACCENT],
           "circle-opacity": ["case", ["any", selected, emerg], 0.22, 0] as any,
         },
       });
@@ -425,11 +428,11 @@
           "icon-color": ["get", "color"],
           // White outline pops on dark basemaps; dark outline defines the icon
           // on light basemaps.
-          "icon-halo-color": dark ? "#f4f7fb" : "#10141a",
+          "icon-halo-color": lab.outline,
           "icon-halo-width": 1.55,
           "icon-halo-blur": 0.4,
-          "text-color": dark ? "#e6edf3" : "#1c1c1c",
-          "text-halo-color": dark ? "#0e1116" : "#ffffff",
+          "text-color": lab.text,
+          "text-halo-color": lab.halo,
           "text-halo-width": 1.6,
         },
       });
@@ -438,21 +441,9 @@
     // Re-apply theme-dependent colors (the layer persists across style swaps).
     if (map.getLayer("aircraft-symbol") && themeApplied !== activeBasemap) {
       themeApplied = activeBasemap;
-      map.setPaintProperty(
-        "aircraft-symbol",
-        "icon-halo-color",
-        dark ? "#f4f7fb" : "#10141a",
-      );
-      map.setPaintProperty(
-        "aircraft-symbol",
-        "text-color",
-        dark ? "#e6edf3" : "#1c1c1c",
-      );
-      map.setPaintProperty(
-        "aircraft-symbol",
-        "text-halo-color",
-        dark ? "#0e1116" : "#ffffff",
-      );
+      map.setPaintProperty("aircraft-symbol", "icon-halo-color", lab.outline);
+      map.setPaintProperty("aircraft-symbol", "text-color", lab.text);
+      map.setPaintProperty("aircraft-symbol", "text-halo-color", lab.halo);
     }
 
     if (freshInstall) {
@@ -695,7 +686,7 @@
       const el = document.createElement("div");
       el.className = "home-marker";
       el.innerHTML =
-        '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2 C7 2 3.5 6 3.5 10.5 C3.5 17 12 23 12 23 C12 23 20.5 17 20.5 10.5 C20.5 6 17 2 12 2 Z" fill="#4c9be8" stroke="#0b1220" stroke-width="1.5"/><circle cx="12" cy="10.5" r="3.4" fill="#0b1220"/></svg>';
+        `<svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 2 C7 2 3.5 6 3.5 10.5 C3.5 17 12 23 12 23 C12 23 20.5 17 20.5 10.5 C20.5 6 17 2 12 2 Z" fill="${ACCENT}" stroke="#0b1220" stroke-width="1.5"/><circle cx="12" cy="10.5" r="3.4" fill="#0b1220"/></svg>`;
       // setLngLat BEFORE addTo — a Marker added without a position throws every
       // render frame from MapLibre's projection helper and freezes the map.
       homeMarker = new maplibregl.Marker({ element: el, anchor: "bottom" })

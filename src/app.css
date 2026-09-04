@@ -6,15 +6,10 @@
   --text: #e6edf3;
   --text-dim: #8b949e;
   --accent: #4c9be8;
-  --caution-grey: #2b2b2b;
-  --caution-gold: #d4a017;
-
-  --alt-ground: #9aa0a6;
-  --alt-low: #7ad151;
-  --alt-mid: #f9c74f;
-  --alt-high: #f3722c;
-  --alt-vhigh: #b5179e;
   --emergency: #ff3b30;
+  /* Data-driven palettes (altitude bands, flight categories, airspace classes,
+     caution tape) live in src/lib/theme/colors.ts — map layers and canvas
+     markers can't read CSS vars. --accent / --emergency are mirrored there. */
 
   color-scheme: dark;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,

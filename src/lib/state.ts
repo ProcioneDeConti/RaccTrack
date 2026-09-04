@@ -1,6 +1,7 @@
 import { writable, derived, get } from "svelte/store";
 import type { Aircraft, AircraftDiff, SourceStatus } from "./api/types";
-import { altColor, iconKindFor, sizeMulFor } from "./map/icons";
+import { iconKindFor, sizeMulFor } from "./map/icons";
+import { altColor, EMERGENCY } from "./theme/colors";
 import { matchesFilters, type Filters, defaultFilters } from "./filters/filters";
 
 /** Live aircraft keyed by hex. */
@@ -161,7 +162,7 @@ export const aircraftGeoJson = derived(
           icon,
           sizeMul,
           rotation: heading ?? 0,
-          color: emergency ? "#ff3b30" : altColor(a.altBaro, a.onGround),
+          color: emergency ? EMERGENCY : altColor(a.altBaro, a.onGround),
           callsign: (a.flight ?? a.registration ?? a.hex).trim(),
           altBaro: a.altBaro,
           military: a.military,
