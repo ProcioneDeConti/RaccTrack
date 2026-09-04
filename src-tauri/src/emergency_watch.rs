@@ -138,10 +138,29 @@ impl EmergencyWatch {
     }
 
     async fn fetch(&self, code: &str) -> anyhow::Result<Vec<String>> {
-        let url = format!("https://api.adsb.lol/v2/squawk/{code}");
+        // adsb.lol has been intermittently unreachable; fall back to adsb.fi
+        // (which uses `/v2/sqk/` rather than `/v2/squawk/`).
+        let urls = [
+            format!("https://api.adsb.lol/v2/squawk/{code}"),
+            format!("https://opendata.adsb.fi/api/v2/sqk/{code}"),
+        ];
+        let mut last_err: Option<anyhow::Error> = None;
+        for url in urls {
+            match self.fetch_url(&url).await {
+                Ok(v) => return Ok(v),
+                Err(e) => {
+                    tracing::debug!("emergency watch {code}: {url} failed: {e}");
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| anyhow::anyhow!("no squawk endpoints")))
+    }
+
+    async fn fetch_url(&self, url: &str) -> anyhow::Result<Vec<String>> {
         let resp = self
             .client
-            .get(&url)
+            .get(url)
             .timeout(Duration::from_secs(15))
             .send()
             .await?;
