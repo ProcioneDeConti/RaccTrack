@@ -120,15 +120,12 @@
             </button>
             <button
               class="name"
-              title="Fly here"
+              title="Fly to {p.label}"
               on:click={() => {
                 selectedHex.set(null);
                 flyTo.set({ lat: p.lat, lon: p.lon, zoom: p.bbox ? 8 : 11 });
-              }}
+              }}>{p.label}</button
             >
-              <span class="l">{p.label}</span>
-              <span class="c">{p.lat.toFixed(3)}, {p.lon.toFixed(3)}</span>
-            </button>
             <label class="al" title="Proximity alert">
               <input
                 type="checkbox"
@@ -146,6 +143,7 @@
               <Icon name="x" size={12} />
             </button>
           </div>
+          <div class="coord">{p.lat.toFixed(3)}, {p.lon.toFixed(3)}</div>
 
           {#if p.alert.enabled && expanded === p.id}
             <div class="cfg">
@@ -251,6 +249,7 @@
     overflow: hidden;
   }
   .results .lbl {
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -291,32 +290,24 @@
     color: var(--accent);
   }
   .name {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
-    overflow: hidden;
     border: none;
     background: transparent;
     text-align: left;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
     padding: 0;
-  }
-  .name .l,
-  .name .c {
-    max-width: 100%;
+    font-size: 12px;
+    font-weight: 600;
+    /* truncation on the flex item itself — the reliable combo */
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .name .l {
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .name .c {
+  .coord {
     font-size: 10px;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
+    margin: 1px 0 0 25px;
   }
   .al {
     flex: 0 0 auto;
@@ -357,6 +348,8 @@
     width: 58px;
   }
   .cfg-open {
+    display: block;
+    max-width: 100%;
     margin-top: 4px;
     border: none;
     background: transparent;
@@ -364,5 +357,8 @@
     font-size: 10px;
     padding: 2px 0;
     text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
