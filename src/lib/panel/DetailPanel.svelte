@@ -15,6 +15,7 @@
   import RouteProgress from "./RouteProgress.svelte";
   import IdentitySection from "./IdentitySection.svelte";
   import TelemetrySection from "./TelemetrySection.svelte";
+  import ViewFromPlace from "./ViewFromPlace.svelte";
   import HistorySection from "../history/HistorySection.svelte";
   import Icon from "../ui/Icon.svelte";
   import Message from "../ui/Message.svelte";
@@ -263,6 +264,8 @@
     </section>
 
     <TelemetrySection {live} />
+
+    <ViewFromPlace {live} />
 
     {#if currentHex}
       <HistorySection hex={currentHex} />

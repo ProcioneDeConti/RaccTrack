@@ -32,6 +32,28 @@ export function bearing(
   return (Math.atan2(y, x) / D2R + 360) % 360;
 }
 
+/**
+ * Local east/north offset (nautical miles) of a point from a reference,
+ * equirectangular approximation — good to well under 1 nm over the ~150 nm
+ * ranges the pass predictor works at, and lets motion be treated as linear.
+ */
+export function enuOffsetNm(
+  latRef: number,
+  lonRef: number,
+  lat: number,
+  lon: number,
+): { e: number; n: number } {
+  return {
+    e: (lon - lonRef) * Math.cos(latRef * D2R) * 60,
+    n: (lat - latRef) * 60,
+  };
+}
+
+/** Smallest absolute difference between two bearings, 0–180 degrees. */
+export function angleDelta(a: number, b: number): number {
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
 /** Compass point for a bearing, e.g. 200 -> "SSW". */
 export function compass(deg: number): string {
   const pts = [

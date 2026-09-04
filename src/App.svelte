@@ -8,6 +8,7 @@
   import FiltersPanel from "./lib/filters/FiltersPanel.svelte";
   import WatchlistPanel from "./lib/watchlist/WatchlistPanel.svelte";
   import PlacesPanel from "./lib/places/PlacesPanel.svelte";
+  import PassesPanel from "./lib/passes/PassesPanel.svelte";
   import EventsPanel from "./lib/history/EventsPanel.svelte";
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
@@ -47,6 +48,7 @@
     | "layers"
     | "watchlist"
     | "places"
+    | "passes"
     | "events"
     | "logbook"
     | "settings"
@@ -143,6 +145,8 @@
       <WatchlistPanel onClose={close} />
     {:else if panel === "places"}
       <PlacesPanel onClose={close} />
+    {:else if panel === "passes"}
+      <PassesPanel onClose={close} />
     {:else if panel === "events"}
       <EventsPanel onClose={close} />
     {:else if panel === "logbook"}

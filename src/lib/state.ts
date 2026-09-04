@@ -194,6 +194,29 @@ export function selectedAircraft(): Aircraft | null {
   return get(aircraft).get(hex) ?? null;
 }
 
+import {
+  predictPass,
+  passClock,
+  passHorizonMin,
+  passRadiusNm,
+  type PredictedPass,
+} from "./passes";
+
+/** Upcoming passes over the primary place, soonest first. */
+export const upcomingPasses = derived(
+  [aircraft, primaryPlace, passClock, passHorizonMin, passRadiusNm],
+  ([$aircraft, $place, $now, $horizon, $radius]) => {
+    if (!$place) return [] as PredictedPass[];
+    const out: PredictedPass[] = [];
+    for (const ac of $aircraft.values()) {
+      const p = predictPass(ac, $place, $now, $horizon, $radius);
+      if (p) out.push(p);
+    }
+    out.sort((a, b) => a.etaMs - b.etaMs);
+    return out;
+  },
+);
+
 /** Aircraft with a position inside the current viewport, matching active filters. */
 export const visibleAircraft = derived(
   [aircraft, mapBounds, filters],
