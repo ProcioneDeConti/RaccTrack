@@ -1,6 +1,7 @@
 <script lang="ts">
   import { lastAlert } from "./watchStore";
   import { selectedHex } from "../state";
+  import Icon from "../ui/Icon.svelte";
 
   let visible = false;
   let timer: number | undefined;
@@ -27,7 +28,9 @@
       visible = false;
     }}
   >
-    <strong>{$lastAlert.emergency ? "⚠ Emergency" : "Watch hit"}</strong>
+    <strong>
+      {#if $lastAlert.emergency}<Icon name="alert-triangle" size={13} /> Emergency{:else}Watch hit{/if}
+    </strong>
     <span>{$lastAlert.hex} — {$lastAlert.reason}</span>
   </button>
 {/if}
@@ -55,5 +58,10 @@
   .toast span {
     font-size: 12px;
     color: var(--text-dim);
+  }
+  .toast strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
 </style>

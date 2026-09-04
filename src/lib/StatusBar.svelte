@@ -13,6 +13,7 @@
     ageStr = t ? `${Math.max(0, Math.round((Date.now() - t) / 1000))}s ago` : "—";
   }, 1000);
   import { onDestroy } from "svelte";
+  import Icon from "./ui/Icon.svelte";
   onDestroy(() => clearInterval(tick));
 
   $: withPos = [...$aircraft.values()].filter((a) => a.lat !== null).length;
@@ -20,7 +21,8 @@
 
 <footer class="statusbar">
   <span class="src" class:bad={$sourceStatus && !$sourceStatus.healthy}>
-    ● {$sourceStatus?.activeSource ?? "connecting…"}
+    <span class="dot"></span>
+    {$sourceStatus?.activeSource ?? "connecting…"}
     {#if $sourceStatus && !$sourceStatus.healthy}(degraded){/if}
   </span>
   <span>{withPos} shown / {$total} in feed</span>
@@ -29,7 +31,10 @@
     <span class="muted">{$sourceStatus.requestsLastMinute} req/min</span>
   {/if}
   {#if $emergencyCount > 0}
-    <span class="emg">⚠ {$emergencyCount} emergency squawk{$emergencyCount > 1 ? "s" : ""} (NA)</span>
+    <span class="emg">
+      <Icon name="alert-triangle" size={12} />
+      {$emergencyCount} emergency squawk{$emergencyCount > 1 ? "s" : ""} (NA)
+    </span>
   {/if}
   <span class="spacer"></span>
   <span class="muted">North America coverage</span>
@@ -50,6 +55,16 @@
   }
   .src {
     color: #7ee2b8;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .src .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex: 0 0 auto;
   }
   .src.bad {
     color: var(--emergency);
@@ -57,6 +72,9 @@
   .emg {
     color: var(--emergency);
     font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .spacer {
     flex: 1;

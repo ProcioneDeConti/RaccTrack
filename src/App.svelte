@@ -36,6 +36,7 @@
   import { units } from "./lib/format";
   import type { Bbox } from "./lib/map/region";
   import iconUrl from "./assets/icon.png";
+  import Icon from "./lib/ui/Icon.svelte";
 
   let panel: "none" | "watchlist" | "settings" = "none";
   let showList = false;
@@ -109,22 +110,38 @@
   <div class="toolbar">
     <div class="brand"><img src={iconUrl} alt="" /> RaccTrack <span class="sub">(ADS-B)</span></div>
     <SearchBox />
-    <button class:active={showList} on:click={() => (showList = !showList)}>
+    <button class="labeled" class:active={showList} on:click={() => (showList = !showList)}>
+      <Icon name="list" />
       List{#if $visibleAircraft.length} ({$visibleAircraft.length}){/if}
     </button>
-    <button class:active={panel === "watchlist"} on:click={() => toggle("watchlist")}>
+    <button
+      class="labeled"
+      class:active={panel === "watchlist"}
+      on:click={() => toggle("watchlist")}
+    >
+      <Icon name="star" />
       Watchlist
     </button>
-    <button class:active={panel === "settings"} on:click={() => toggle("settings")}>
-      Settings
-    </button>
+
+    <span class="spacer"></span>
+
     <button
-      class="home-btn"
+      class="icon-btn"
       title={$home ? `Go to home — ${$home.label}` : "Set a home location in Settings"}
+      aria-label={$home ? `Go to home — ${$home.label}` : "Home (set a location in Settings)"}
       disabled={!$home}
       on:click={() => goHomeSignal.update((n) => n + 1)}
     >
-      ⌂ Home
+      <Icon name="home" size={17} />
+    </button>
+    <button
+      class="icon-btn"
+      class:active={panel === "settings"}
+      title="Settings"
+      aria-label="Settings"
+      on:click={() => toggle("settings")}
+    >
+      <Icon name="settings" size={17} />
     </button>
   </div>
 
@@ -179,6 +196,31 @@
   .brand .sub {
     font-weight: 400;
     color: var(--text-dim);
+  }
+  .spacer {
+    flex: 1 1 auto;
+  }
+  button.labeled {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  button.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+    color: var(--text-dim);
+  }
+  button.icon-btn:hover:not(:disabled) {
+    color: var(--text);
+  }
+  button.icon-btn.active {
+    color: #fff;
+  }
+  button.icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
   .stage {
     position: relative;

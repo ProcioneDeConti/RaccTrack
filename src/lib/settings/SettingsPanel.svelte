@@ -16,6 +16,7 @@
   import { basemap, home, goHomeSignal } from "../state";
   import { BASEMAP_THEMES } from "../map/style";
   import { clipToRegion, type Bbox } from "../map/region";
+  import Icon from "../ui/Icon.svelte";
 
   export let onClose: () => void;
   export let currentBbox: () => Bbox | null;
@@ -119,7 +120,7 @@
 <aside class="panel">
   <header>
     <h3>Settings</h3>
-    <button class="close" on:click={onClose}>✕</button>
+    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
   </header>
 
   {#if s}
@@ -172,7 +173,7 @@
     {/if}
     {#if $home}
       <div class="current-home">
-        <span title={$home.label}>⌂ {$home.label}</span>
+        <span class="hl" title={$home.label}><Icon name="home" size={13} /> {$home.label}</span>
         <span class="home-actions">
           <button on:click={() => goHomeSignal.update((n) => n + 1)}>Go</button>
           <button on:click={clearHome}>Clear</button>
@@ -303,6 +304,20 @@
   .close {
     border: none;
     background: transparent;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+  .close:hover {
+    color: var(--text);
+  }
+  .hl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .row {
     display: flex;

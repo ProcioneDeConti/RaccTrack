@@ -3,6 +3,7 @@
   import { chartTarget } from "../state";
   import { airportCharts, chartPdf, openExternal } from "../api/backend";
   import type { ChartRef, ChartSet } from "../api/types";
+  import Icon from "../ui/Icon.svelte";
 
   let target: { ident: string; label: string } | null = null;
   let set: ChartSet | null = null;
@@ -149,7 +150,7 @@
           <span class="dim">{target.label}</span>
           {#if set}<span class="cycle">Cycle {set.cycle}</span>{/if}
         </div>
-        <button class="close" on:click={close} aria-label="Close">✕</button>
+        <button class="close" on:click={close} aria-label="Close"><Icon name="x" size={15} /></button>
       </header>
 
       <div class="body">
@@ -179,17 +180,27 @@
         <div class="view">
           {#if selected}
             <div class="viewbar">
-              <button on:click={() => step(-1)} disabled={flat.length < 2}
-                >‹ Prev</button
+              <button
+                class="ib"
+                on:click={() => step(-1)}
+                disabled={flat.length < 2}
+                aria-label="Previous chart"
               >
+                <Icon name="chevron-left" size={15} /> Prev
+              </button>
               <span class="cur">{selected.name}</span>
-              <button on:click={() => step(1)} disabled={flat.length < 2}
-                >Next ›</button
+              <button
+                class="ib"
+                on:click={() => step(1)}
+                disabled={flat.length < 2}
+                aria-label="Next chart"
               >
+                Next <Icon name="chevron-right" size={15} />
+              </button>
               <span class="spacer"></span>
-              <button on:click={openSelected}
-                >Open in browser ↗</button
-              >
+              <button class="ib" on:click={openSelected}>
+                Open in browser <Icon name="external-link" size={13} />
+              </button>
             </div>
           {/if}
           <div class="pane">
@@ -200,8 +211,8 @@
                 <p class="err">Couldn’t load this chart.</p>
                 <p class="dim">{pdfError}</p>
                 {#if selected}
-                  <button on:click={openSelected}>
-                    Open in browser instead ↗
+                  <button class="ib" on:click={openSelected}>
+                    Open in browser instead <Icon name="external-link" size={13} />
                   </button>
                 {/if}
               </div>
@@ -268,9 +279,18 @@
   .close {
     border: none;
     background: transparent;
-    color: var(--text);
-    font-size: 15px;
+    color: var(--text-dim);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+  }
+  .close:hover {
+    color: var(--text);
+  }
+  .ib {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .body {
     flex: 1;

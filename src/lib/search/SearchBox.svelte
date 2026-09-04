@@ -3,6 +3,7 @@
   import { aircraft, selectedHex, selectedAirport, flyTo } from "../state";
   import { findAirport } from "../api/backend";
   import type { Airport } from "../api/types";
+  import Icon from "../ui/Icon.svelte";
 
   let q = "";
   let acHits: { hex: string; label: string; sub: string }[] = [];
@@ -78,6 +79,7 @@
 </script>
 
 <div class="search" class:open>
+  <span class="lead"><Icon name="search" size={14} /></span>
   <input
     type="text"
     placeholder="Search callsign · reg · hex · airport"
@@ -86,7 +88,7 @@
     on:focus={() => (open = q.trim().length >= 2)}
     on:keydown={onKey}
   />
-  {#if q}<button class="x" on:click={reset}>✕</button>{/if}
+  {#if q}<button class="x" on:click={reset} aria-label="Clear search"><Icon name="x" size={13} /></button>{/if}
 
   {#if open && (acHits.length || apHits.length || searching)}
     <div class="results">
@@ -116,8 +118,18 @@
   .search {
     position: relative;
   }
+  .lead {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    pointer-events: none;
+    display: inline-flex;
+  }
   input {
     width: 210px;
+    padding-left: 26px;
     transition: width 0.15s;
   }
   .search.open input,
@@ -127,11 +139,17 @@
   .x {
     position: absolute;
     right: 2px;
-    top: 2px;
+    top: 50%;
+    transform: translateY(-50%);
     border: none;
     background: transparent;
-    font-size: 11px;
-    padding: 2px 5px;
+    color: var(--text-dim);
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 5px;
+  }
+  .x:hover {
+    color: var(--text);
   }
   .results {
     position: absolute;

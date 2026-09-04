@@ -20,12 +20,9 @@ export function speed(kt: number | null): string {
 
 export function verticalRate(fpm: number | null): string {
   if (fpm === null || fpm === 0) return "level";
-  const arrow = fpm > 0 ? "▲" : "▼";
-  const v =
-    current === "metric"
-      ? `${Math.round(Math.abs(fpm) * 0.00508 * 100) / 100} m/s`
-      : `${Math.abs(Math.round(fpm)).toLocaleString()} fpm`;
-  return `${arrow} ${v}`;
+  return current === "metric"
+    ? `${Math.round(Math.abs(fpm) * 0.00508 * 100) / 100} m/s`
+    : `${Math.abs(Math.round(fpm)).toLocaleString()} fpm`;
 }
 
 export function degrees(d: number | null): string {

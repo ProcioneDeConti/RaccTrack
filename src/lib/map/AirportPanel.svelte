@@ -5,6 +5,7 @@
   import type { AirportInfo, StationWx } from "../api/types";
   import { altitude } from "../format";
   import { decodeMetar, decodeTaf } from "../wx/metar";
+  import Icon from "../ui/Icon.svelte";
 
   let showRaw = false;
 
@@ -115,7 +116,7 @@
           >
         {/if}
       </div>
-      <button class="close" on:click={close}>✕</button>
+      <button class="close" on:click={close} aria-label="Close"><Icon name="x" size={14} /></button>
     </header>
 
     {#if loading && !info}
@@ -219,7 +220,8 @@
       <section>
         <h4>Charts</h4>
         <button class="charts-btn" on:click={openCharts}>
-          Approach &amp; airport plates →
+          Approach &amp; airport plates
+          <Icon name="chevron-right" size={14} />
         </button>
       </section>
     {/if}
@@ -269,6 +271,12 @@
   .close {
     border: none;
     background: transparent;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+  .close:hover {
+    color: var(--text);
   }
   .name {
     margin: 6px 0 0;
@@ -337,7 +345,10 @@
     background: var(--bg);
     color: var(--text);
     cursor: pointer;
-    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
   }
   .charts-btn:hover {
     border-color: var(--accent);

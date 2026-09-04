@@ -11,6 +11,7 @@
   import { getAircraftDetail, addWatch } from "../api/backend";
   import type { AircraftDetail } from "../api/types";
   import DatalinkSection from "./DatalinkSection.svelte";
+  import Icon from "../ui/Icon.svelte";
   import {
     altitude,
     speed,
@@ -192,8 +193,8 @@
         />
         <div class="hero-scrim"></div>
         {#if photos.length > 1}
-          <button class="nav prev" on:click={prevPhoto} title="Previous photo">‹</button>
-          <button class="nav next" on:click={nextPhoto} title="Next photo">›</button>
+          <button class="nav prev" on:click={prevPhoto} title="Previous photo" aria-label="Previous photo"><Icon name="chevron-left" size={18} /></button>
+          <button class="nav next" on:click={nextPhoto} title="Next photo" aria-label="Next photo"><Icon name="chevron-right" size={18} /></button>
           <div class="dots">
             {#each photos as _, i}
               <span class="dot" class:on={i === photoIdx}></span>
@@ -201,7 +202,7 @@
           </div>
         {/if}
       {/if}
-      <button class="close" on:click={close} title="Close">✕</button>
+      <button class="close" on:click={close} title="Close" aria-label="Close"><Icon name="x" size={14} /></button>
       <div class="title">
         <span class="cs">{live?.flight ?? live?.registration ?? currentHex}</span>
         {#if live?.military}<span class="tag mil">MIL</span>{/if}
@@ -276,7 +277,7 @@
             <strong>{detail.route.originIcao ?? "?"}</strong>
             <span class="muted">{detail.route.originName ?? ""}</span>
           </div>
-          <div class="arrow">→</div>
+          <div class="arrow"><Icon name="arrow-right" size={15} /></div>
           <div>
             <strong>{detail.route.destinationIcao ?? "?"}</strong>
             <span class="muted">{detail.route.destinationName ?? ""}</span>
@@ -325,7 +326,12 @@
         <dt>Mach</dt><dd>{live?.mach ?? "—"}</dd>
         <dt>Track</dt><dd>{degrees(live?.track ?? null)}</dd>
         <dt>Heading</dt><dd>{degrees(live?.trueHeading ?? live?.magHeading ?? null)}</dd>
-        <dt>Vertical rate</dt><dd>{verticalRate(live?.baroRate ?? live?.geomRate ?? null)}</dd>
+        <dt>Vertical rate</dt>
+        <dd class="vr">
+          {#if (live?.baroRate ?? live?.geomRate ?? 0) > 0}<Icon name="arrow-up" size={11} />
+          {:else if (live?.baroRate ?? live?.geomRate ?? 0) < 0}<Icon name="arrow-down" size={11} />{/if}
+          {verticalRate(live?.baroRate ?? live?.geomRate ?? null)}
+        </dd>
         <dt>Squawk</dt>
         <dd>{live?.squawk ?? "—"}{#if sqMeaning} <span class="muted">— {sqMeaning}</span>{/if}</dd>
         <dt>Selected alt</dt><dd>{altitude(live?.navAltitude ?? null)}</dd>
@@ -346,20 +352,26 @@
     <footer>
       <div class="btnrow">
         <button
+          class="ib"
           class:active={$followHex === currentHex}
           on:click={() =>
             followHex.set($followHex === currentHex ? null : currentHex)}
         >
-          {$followHex === currentHex ? "⊙ Following" : "⊙ Follow"}
+          <Icon name="crosshair" size={14} />
+          {$followHex === currentHex ? "Following" : "Follow"}
         </button>
         <button
+          class="ib"
           class:active={currentHex ? $pinned.includes(currentHex) : false}
           on:click={() => currentHex && togglePin(currentHex)}
         >
-          {currentHex && $pinned.includes(currentHex) ? "📌 Pinned" : "📌 Pin"}
+          <Icon name="pin" size={14} />
+          {currentHex && $pinned.includes(currentHex) ? "Pinned" : "Pin"}
         </button>
       </div>
-      <button on:click={watchThis}>+ Watch this aircraft</button>
+      <button class="ib" on:click={watchThis}>
+        <Icon name="plus" size={14} /> Watch this aircraft
+      </button>
     </footer>
   </aside>
 {/if}
@@ -420,9 +432,10 @@
     border: none;
     background: rgba(0, 0, 0, 0.4);
     color: #fff;
-    font-size: 18px;
-    line-height: 1;
-    padding: 4px 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 7px;
     border-radius: 4px;
     z-index: 2;
   }
@@ -501,8 +514,8 @@
     right: 8px;
     border: none;
     background: transparent;
-    font-size: 14px;
-    line-height: 1;
+    display: inline-flex;
+    align-items: center;
     color: var(--text);
     z-index: 3;
   }
@@ -510,7 +523,7 @@
     color: #fff;
     background: rgba(0, 0, 0, 0.35);
     border-radius: 4px;
-    padding: 2px 6px;
+    padding: 4px;
   }
   section {
     border-top: 1px solid var(--border);
@@ -556,6 +569,13 @@
   }
   .arrow {
     color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+  }
+  dd.vr :global(svg) {
+    display: inline-block;
+    vertical-align: middle;
+    color: var(--text-dim);
   }
   .bar {
     margin-top: 8px;
@@ -602,5 +622,11 @@
   }
   .btnrow button {
     flex: 1;
+  }
+  button.ib {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
   }
 </style>

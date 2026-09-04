@@ -40,3 +40,8 @@ licenses noted; live services are queried at runtime and are not redistributed.
 
 - Geocoding (home location search): Photon by Komoot, data (c) OpenStreetMap
   contributors. https://photon.komoot.io/
+
+- User-interface icons (src/lib/ui/Icon.svelte): path geometry from Lucide
+  (https://lucide.dev), ISC License. Copyright (c) for portions of this code are
+  held by Lucide Contributors 2022. Lucide is a fork of Feather (MIT, Copyright
+  (c) 2013-2017 Cole Bemis).

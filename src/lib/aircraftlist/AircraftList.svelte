@@ -12,6 +12,7 @@
   import type { Aircraft } from "../api/types";
   import { altitude, speed } from "../format";
   import { distanceNm, fmtDistanceNm } from "../geo";
+  import Icon from "../ui/Icon.svelte";
 
   export let onClose: () => void;
 
@@ -74,18 +75,18 @@
       flyTo.set({ lat: a.lat, lon: a.lon });
   }
 
-  function vsArrow(a: Aircraft): string {
+  function vsDir(a: Aircraft): "up" | "down" | null {
     const r = a.baroRate ?? a.geomRate ?? 0;
-    if (r > 100) return "▲";
-    if (r < -100) return "▼";
-    return "";
+    if (r > 100) return "up";
+    if (r < -100) return "down";
+    return null;
   }
 </script>
 
 <aside class="list">
   <header>
     <span>{rows.length} in view</span>
-    <button class="close" on:click={onClose}>✕</button>
+    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
   </header>
   <div class="scroll">
     <table>
@@ -97,7 +98,7 @@
               class:sorted={sortCol === col.c}
               on:click={() => setSort(col.c)}
             >
-              {col.label}{#if sortCol === col.c}<span class="caret">{sortAsc ? "▲" : "▼"}</span>{/if}
+              {col.label}{#if sortCol === col.c}<span class="caret"><Icon name={sortAsc ? "chevron-up" : "chevron-down"} size={11} /></span>{/if}
             </th>
           {/each}
         </tr>
@@ -115,7 +116,8 @@
               <button
                 class:on={$pinned.includes(a.hex)}
                 title="Pin"
-                on:click|stopPropagation={() => togglePin(a.hex)}>📌</button
+                aria-label="Pin"
+                on:click|stopPropagation={() => togglePin(a.hex)}><Icon name="pin" size={13} /></button
               >
             </td>
             <td class="cs">
@@ -126,7 +128,10 @@
             <td>{a.typeCode ?? "—"}</td>
             <td class="num">{a.onGround ? "GND" : altitude(a.altBaro ?? null)}</td>
             <td class="num">{a.groundSpeed != null ? speed(a.groundSpeed) : "—"}</td>
-            <td class="num">{vsArrow(a)}</td>
+            <td class="num vs">
+              {#if vsDir(a) === "up"}<Icon name="arrow-up" size={11} />
+              {:else if vsDir(a) === "down"}<Icon name="arrow-down" size={11} />{/if}
+            </td>
             <td class="num">{a.squawk ?? "—"}</td>
             <td class="num">
               {distOf(a) === Infinity ? "—" : fmtDistanceNm(distOf(a))}
@@ -168,6 +173,12 @@
   .close {
     border: none;
     background: transparent;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+  .close:hover {
+    color: var(--text);
   }
   .scroll {
     overflow-y: auto;
@@ -193,7 +204,8 @@
     color: var(--text);
   }
   .caret {
-    font-size: 8px;
+    display: inline-flex;
+    vertical-align: middle;
     margin-left: 2px;
   }
   td {
@@ -216,6 +228,15 @@
   .num {
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+  td.vs {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  td.vs :global(svg) {
+    display: inline-block;
+    vertical-align: middle;
+    color: var(--text-dim);
   }
   td.cs {
     font-weight: 600;
@@ -240,11 +261,17 @@
     border: none;
     background: transparent;
     padding: 0;
-    font-size: 11px;
-    filter: grayscale(1) opacity(0.35);
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+  td.pin button:hover {
+    opacity: 1;
   }
   td.pin button.on {
-    filter: none;
+    color: var(--accent);
+    opacity: 1;
   }
   .empty,
   .list :global(p.empty) {

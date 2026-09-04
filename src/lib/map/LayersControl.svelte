@@ -2,6 +2,7 @@
   import { layers, home } from "../state";
   import { updateSettings } from "../api/backend";
   import type { MapLayers } from "../api/types";
+  import Icon from "../ui/Icon.svelte";
 
   let open = false;
 
@@ -96,8 +97,9 @@
 </script>
 
 <div class="layers">
-  <button class:active={anyOn} on:click={() => (open = !open)} title="Map layers">
-    ▤ Layers
+  <button class="mapbtn" class:active={anyOn} on:click={() => (open = !open)} title="Map layers">
+    <Icon name="layers" size={14} />
+    Layers
   </button>
   {#if open}
     <div class="menu">
@@ -146,8 +148,13 @@
   .layers {
     position: absolute;
     top: 14px;
-    left: 128px;
+    left: 150px;
     z-index: 10;
+  }
+  .mapbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .menu {
     margin-top: 6px;

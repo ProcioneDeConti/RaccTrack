@@ -9,6 +9,7 @@
   import type { WatchKind, Preset } from "../api/types";
   import { watchEntries, alertLog, refreshWatch } from "./watchStore";
   import { selectedHex, visibleAircraft, flyTo } from "../state";
+  import Icon from "../ui/Icon.svelte";
 
   export let onClose: () => void;
 
@@ -93,7 +94,7 @@
         Alerts{#if $alertLog.length} ({$alertLog.length}){/if}
       </button>
     </div>
-    <button class="close" on:click={onClose}>✕</button>
+    <button class="close" on:click={onClose} aria-label="Close"><Icon name="x" size={14} /></button>
   </header>
 
   {#if tab === "list"}
@@ -119,7 +120,7 @@
           <span class="k">{w.kind}</span>
           <span class="v">{w.value}</span>
           {#if w.label}<span class="l">{w.label}</span>{/if}
-          <button class="rm" on:click={() => remove(w.id)}>✕</button>
+          <button class="rm" on:click={() => remove(w.id)} aria-label="Remove"><Icon name="x" size={12} /></button>
         </li>
       {:else}
         <li class="muted">
@@ -204,6 +205,12 @@
   .close {
     border: none;
     background: transparent;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+  .close:hover {
+    color: var(--text);
   }
   .add {
     display: grid;
@@ -258,6 +265,12 @@
     margin-left: auto;
     border: none;
     background: transparent;
+    display: inline-flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+  .rm:hover {
+    color: var(--text);
   }
   .feed li {
     gap: 6px;

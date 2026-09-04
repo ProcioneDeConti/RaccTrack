@@ -1,6 +1,7 @@
 <script lang="ts">
   import { aircraft, pinned, togglePin, selectedHex, flyTo } from "../state";
   import { altitude, speed } from "../format";
+  import Icon from "../ui/Icon.svelte";
 
   $: cards = $pinned.map((hex) => ({ hex, ac: $aircraft.get(hex) ?? null }));
 
@@ -11,9 +12,9 @@
       flyTo.set({ lat: a.lat, lon: a.lon });
   }
 
-  function vs(r: number | null | undefined): string {
-    if (r == null || Math.abs(r) < 100) return "";
-    return r > 0 ? "▲" : "▼";
+  function vs(r: number | null | undefined): "up" | "down" | null {
+    if (r == null || Math.abs(r) < 100) return null;
+    return r > 0 ? "up" : "down";
   }
 </script>
 
@@ -32,16 +33,18 @@
             class="unpin"
             role="button"
             tabindex="-1"
+            aria-label="Unpin"
             on:click|stopPropagation={() => togglePin(c.hex)}
             on:keydown|stopPropagation
-            title="Unpin">✕</span
+            title="Unpin"><Icon name="x" size={11} /></span
           >
         </span>
         {#if c.ac}
           <span class="meta">
             {c.ac.typeCode ?? "—"} ·
             {c.ac.onGround ? "GND" : altitude(c.ac.altBaro ?? null)}
-            {vs(c.ac.baroRate ?? c.ac.geomRate)}
+            {#if vs(c.ac.baroRate ?? c.ac.geomRate) === "up"}<Icon name="arrow-up" size={10} />
+            {:else if vs(c.ac.baroRate ?? c.ac.geomRate) === "down"}<Icon name="arrow-down" size={10} />{/if}
             {#if c.ac.groundSpeed != null} · {speed(c.ac.groundSpeed)}{/if}
           </span>
         {:else}
@@ -93,7 +96,8 @@
   }
   .unpin {
     color: var(--text-dim);
-    font-size: 10px;
+    display: inline-flex;
+    align-items: center;
   }
   .unpin:hover {
     color: var(--text);
@@ -102,5 +106,9 @@
     font-size: 10px;
     color: var(--text-dim);
     font-variant-numeric: tabular-nums;
+  }
+  .meta :global(svg) {
+    display: inline-block;
+    vertical-align: middle;
   }
 </style>

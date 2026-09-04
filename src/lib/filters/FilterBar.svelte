@@ -1,6 +1,7 @@
 <script lang="ts">
   import { filters } from "../state";
   import { ALT_CEILING, defaultFilters, isDefault } from "./filters";
+  import Icon from "../ui/Icon.svelte";
 
   let open = false;
   $: f = $filters;
@@ -17,7 +18,8 @@
 </script>
 
 <div class="filterbar">
-  <button class:active={open} on:click={() => (open = !open)}>
+  <button class="mapbtn" class:active={open} on:click={() => (open = !open)}>
+    <Icon name="filter" size={14} />
     Filters {#if !isDefault(f)}<span class="dot"></span>{/if}
   </button>
 
@@ -70,6 +72,11 @@
     top: 14px;
     left: 52px;
     z-index: 10;
+  }
+  .mapbtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
   }
   .dot {
     display: inline-block;
