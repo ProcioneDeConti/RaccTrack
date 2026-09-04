@@ -801,7 +801,7 @@
 
 {#if !mapError && $aircraftGeoJson.features.length === 0}
   <div class="empty-mark">
-    <RaccoonMark size={120} />
+    <RaccoonMark size={96} />
     <p>No aircraft in view — pan the map or wait for the next sweep.</p>
   </div>
 {/if}
@@ -836,12 +836,13 @@
     text-align: center;
   }
   .empty-mark :global(.rm) {
-    opacity: 0.13;
+    opacity: 0.9;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
   }
   .empty-mark p {
     margin: 0;
     font-size: 11px;
-    opacity: 0.75;
+    opacity: 0.85;
     max-width: 240px;
   }
   .map-error {

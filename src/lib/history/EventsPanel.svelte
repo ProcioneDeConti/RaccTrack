@@ -81,7 +81,7 @@
     {#if loading}
       <Message kind="loading">Loading…</Message>
     {:else if shown.length === 0}
-      <Message kind="empty" mascot={all.length === 0}>
+      <Message kind="empty">
         {all.length === 0
           ? "No events recorded yet. Squawk changes, takeoffs/landings and emergency squawks show up here as they happen."
           : "Nothing matches this filter."}
