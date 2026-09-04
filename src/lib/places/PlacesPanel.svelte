@@ -248,8 +248,10 @@
     text-align: left;
     font-size: 12px;
     padding: 5px 8px;
+    overflow: hidden;
   }
   .results .lbl {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -291,6 +293,7 @@
   .name {
     flex: 1 1 auto;
     min-width: 0;
+    overflow: hidden;
     border: none;
     background: transparent;
     text-align: left;
@@ -299,12 +302,16 @@
     gap: 1px;
     padding: 0;
   }
-  .name .l {
-    font-size: 12px;
-    font-weight: 600;
+  .name .l,
+  .name .c {
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .name .l {
+    font-size: 12px;
+    font-weight: 600;
   }
   .name .c {
     font-size: 10px;
