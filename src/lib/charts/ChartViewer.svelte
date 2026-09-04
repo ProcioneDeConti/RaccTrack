@@ -306,10 +306,7 @@
   }
   .picker h4 {
     margin: 10px 6px 4px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
+    font-size: var(--fs-xs);
   }
   .chart {
     display: block;

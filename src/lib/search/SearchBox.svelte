@@ -93,7 +93,7 @@
   {#if open && (acHits.length || apHits.length || searching)}
     <div class="results">
       {#if acHits.length}
-        <div class="grp">Aircraft</div>
+        <div class="grp u-eyebrow">Aircraft</div>
         {#each acHits as h}
           <button on:click={() => pickAc(h.hex)}>
             <span class="l">{h.label}</span><span class="s">{h.sub}</span>
@@ -101,7 +101,7 @@
         {/each}
       {/if}
       {#if apHits.length}
-        <div class="grp">Airports</div>
+        <div class="grp u-eyebrow">Airports</div>
         {#each apHits as a}
           <button on:click={() => pickAp(a)}>
             <span class="l">{a.icao ?? a.ident}</span>
@@ -109,7 +109,7 @@
           </button>
         {/each}
       {/if}
-      {#if searching && !apHits.length}<div class="grp">searching…</div>{/if}
+      {#if searching && !apHits.length}<div class="grp u-eyebrow">searching…</div>{/if}
     </div>
   {/if}
 </div>
@@ -166,10 +166,6 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   }
   .grp {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
     padding: 4px 6px 2px;
   }
   .results button {

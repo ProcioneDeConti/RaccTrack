@@ -290,11 +290,6 @@
     margin-top: 8px;
   }
   h4 {
-    margin: 0 0 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
     display: flex;
     justify-content: space-between;
     align-items: baseline;
@@ -383,11 +378,7 @@
   }
   h5 {
     margin: 10px 0 4px;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
-    font-weight: 600;
+    font-size: var(--fs-xs);
   }
   .tafp {
     margin: 0 0 6px;

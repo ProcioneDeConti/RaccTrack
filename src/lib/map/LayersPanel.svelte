@@ -113,7 +113,7 @@
 
   {#if l.weather}
     <div class="legend">
-      <div class="lh">Flight category (hover for detail)</div>
+      <div class="lh u-eyebrow">Flight category (hover for detail)</div>
       {#each WX_LEGEND as x}
         <div class="lrow" title={x.tip}>
           <span class="sw" style="background:{x.color}"></span>
@@ -124,7 +124,7 @@
   {/if}
   {#if l.airspace}
     <div class="legend">
-      <div class="lh">Airspace (hover for detail)</div>
+      <div class="lh u-eyebrow">Airspace (hover for detail)</div>
       {#each AS_LEGEND as x}
         <div class="lrow" title={x.tip}>
           <span class="sw" style="background:{x.color}"></span>
@@ -155,10 +155,6 @@
     gap: 2px;
   }
   .lh {
-    font-size: 9px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-dim);
     margin-bottom: 2px;
   }
   .lrow {

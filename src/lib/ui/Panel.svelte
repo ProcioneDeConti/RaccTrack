@@ -55,7 +55,7 @@
   }
   header h2 {
     margin: 0;
-    font-size: 13px;
+    font-size: var(--fs-base);
     font-weight: 600;
   }
   .actions {

@@ -530,13 +530,6 @@
     padding-top: 8px;
     margin-top: 8px;
   }
-  h4 {
-    margin: 0 0 6px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-dim);
-  }
   dl {
     display: grid;
     grid-template-columns: 40% 60%;

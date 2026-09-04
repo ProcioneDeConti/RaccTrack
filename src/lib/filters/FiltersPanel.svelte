@@ -23,10 +23,10 @@
     <button class="link" on:click={reset} disabled={isDefault(f)}>Reset</button>
   </svelte:fragment>
 
-  <div class="row hdr">
+  <h4 class="row">
     Altitude
     <span class="muted">{f.altMin.toLocaleString()}–{f.altMax.toLocaleString()} ft</span>
-  </div>
+  </h4>
   <input
     type="range"
     min="0"
@@ -49,7 +49,7 @@
   <label><input type="checkbox" bind:checked={f.hideGround} /> Hide on-ground</label>
   <label><input type="checkbox" bind:checked={f.requirePosition} /> Require position</label>
 
-  <div class="row hdr">Types (ICAO)</div>
+  <h4 class="row">Types (ICAO)</h4>
   <input
     type="text"
     placeholder="e.g. B738 A320 C172"
@@ -75,13 +75,12 @@
   .row {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
-    margin: 8px 0 4px;
-  }
-  .hdr {
-    color: var(--text);
+    align-items: baseline;
+    margin: 10px 0 4px;
   }
   .muted {
+    text-transform: none;
+    letter-spacing: 0;
     color: var(--text-dim);
   }
   .link {

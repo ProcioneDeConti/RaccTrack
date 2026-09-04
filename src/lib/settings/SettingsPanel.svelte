@@ -144,7 +144,7 @@
     </label>
 
     <hr />
-    <div class="hdr">Home location</div>
+    <h4>Home location</h4>
     <form class="home-search" on:submit|preventDefault={searchHome}>
       <input
         type="text"
@@ -179,7 +179,7 @@
     {/if}
     <hr />
 
-    <div class="hdr">Aircraft photos</div>
+    <h4>Aircraft photos</h4>
     <label class="stack">
       <span class="muted"
         >planespotters.net contact (URL or email) — required by them to show
@@ -310,12 +310,6 @@
     margin: 2px 0;
   }
   .muted {
-    color: var(--text-dim);
-  }
-  .hdr {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
     color: var(--text-dim);
   }
   .stack {

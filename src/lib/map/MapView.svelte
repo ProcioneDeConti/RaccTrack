@@ -19,6 +19,7 @@
     themeFor,
   } from "./style";
   import { registerAircraftIcons } from "./icons";
+  import Icon from "../ui/Icon.svelte";
   import { addCoverageBoundary } from "./coverage";
   import { makeTransformRequest } from "./tileProxy";
   import { Overlays } from "./overlays";
@@ -790,7 +791,8 @@
 <div class="map" bind:this={container}></div>
 {#if $followHex}
   <button class="follow-chip" on:click={() => followHex.set(null)}>
-    ⊙ Following {($aircraft.get($followHex)?.flight ?? $followHex).trim()} — click to stop
+    <Icon name="crosshair" size={13} />
+    Following {($aircraft.get($followHex)?.flight ?? $followHex).trim()} — click to stop
   </button>
 {/if}
 {#if mapError}
@@ -828,12 +830,15 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: var(--accent);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 4px 12px;
-    font-size: 12px;
+    font-size: var(--fs-md);
     font-weight: 600;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   }

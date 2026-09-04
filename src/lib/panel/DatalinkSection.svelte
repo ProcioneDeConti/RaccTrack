@@ -3,6 +3,7 @@
   import { datalinkFor } from "../api/backend";
   import type { DlMessage } from "../api/types";
   import { ACCENT } from "../theme/colors";
+  import Icon from "../ui/Icon.svelte";
 
   export let hex: string;
 
@@ -57,8 +58,14 @@
   <h4>
     Datalink
     {#if loaded}
-      <button class="mini" on:click={refresh} disabled={loading} title="Refresh">
-        ⟳
+      <button
+        class="mini"
+        on:click={refresh}
+        disabled={loading}
+        title="Refresh"
+        aria-label="Refresh"
+      >
+        <Icon name="refresh-cw" size={12} />
       </button>
     {/if}
   </h4>
@@ -113,7 +120,9 @@
     cursor: pointer;
   }
   .mini {
-    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 5px;
     text-transform: none;
     letter-spacing: 0;
   }
