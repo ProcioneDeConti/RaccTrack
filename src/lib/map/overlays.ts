@@ -41,6 +41,10 @@ export class Overlays {
   private fltCat = new Map<string, string>();
   private lastAirports: Airport[] = [];
   private handlersBound = false;
+  /** Last-applied `visibility` per layer id, so we don't re-set an unchanged
+   *  value (each `setLayoutProperty` re-fires `styledata`). Cleared on install
+   *  because a fresh style resets every layer to visible. */
+  private visState: Record<string, boolean> = {};
 
   constructor(map: MlMap) {
     this.map = map;
@@ -49,6 +53,9 @@ export class Overlays {
   /** Idempotent — safe to call on every style.load. */
   install(beforeId?: string) {
     const m = this.map;
+    // A style swap wipes every layer; only then does the visibility cache go
+    // stale (fresh layers default to visible).
+    if (!m.getLayer("ov-airport-dot")) this.visState = {};
     if (!m.getSource("ov-airspace")) {
       m.addSource("ov-airspace", { type: "geojson", data: EMPTY as any });
     }
@@ -198,12 +205,11 @@ export class Overlays {
 
   setVisibility(layers: MapLayers) {
     const set = (id: string, on: boolean) => {
-      if (this.map.getLayer(id))
-        this.map.setLayoutProperty(
-          id,
-          "visibility",
-          on ? "visible" : "none",
-        );
+      if (this.visState[id] === on) return;
+      if (this.map.getLayer(id)) {
+        this.map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+        this.visState[id] = on;
+      }
     };
     set("ov-airspace-fill", layers.airspace);
     set("ov-airspace-line", layers.airspace);

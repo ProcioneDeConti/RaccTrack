@@ -58,6 +58,7 @@
   let themeApplied = "";
   let overlays: Overlays | undefined;
   let overlayTimer: number | undefined;
+  let styleSettleTimer: number | undefined;
   let unsubLayers: (() => void) | undefined;
   let unsubRings: (() => void) | undefined;
   let unsubFollow: (() => void) | undefined;
@@ -121,6 +122,30 @@
     moveTimer = window.setTimeout(pushViewport, 400);
     if (overlayTimer) clearTimeout(overlayTimer);
     overlayTimer = window.setTimeout(refreshOverlays, 700);
+  }
+
+  // Selection highlight via feature-state — no geometry rebuild on click. A
+  // GeoJSON `setData` can drop feature state, so this is re-run after each feed
+  // push and after a style swap.
+  let appliedSel: string | null = null;
+  function syncSelected() {
+    if (!map?.getSource("aircraft")) return;
+    const hex = get(selectedHex);
+    if (appliedSel && appliedSel !== hex) {
+      try {
+        map.removeFeatureState({ source: "aircraft", id: appliedSel }, "selected");
+      } catch {
+        /* feature gone */
+      }
+    }
+    if (hex) {
+      try {
+        map.setFeatureState({ source: "aircraft", id: hex }, { selected: true });
+      } catch {
+        /* feature not in view */
+      }
+    }
+    appliedSel = hex;
   }
 
   function refreshOverlays() {
@@ -205,6 +230,18 @@
   }
 
   function doInstallLayers(map: MlMap) {
+    // Fast path: this runs on every `styledata`; once everything's installed for
+    // the current style there's nothing to do.
+    if (
+      map.getLayer("aircraft-symbol") &&
+      map.getLayer("ov-airport-dot") &&
+      map.getLayer("coverage-bounds-line") &&
+      map.hasImage("ac-jet") &&
+      themeApplied === activeBasemap
+    ) {
+      return;
+    }
+
     registerAircraftIcons(map);
 
     if (!map.getSource("aircraft")) {
@@ -230,13 +267,14 @@
       console.error("[diag] coverage boundary failed:", (e as Error)?.message ?? e);
     }
     try {
+      // Visibility is applied in afterStyleSettled(), not here — calling
+      // setLayoutProperty from an install that runs on `styledata` re-fires
+      // `styledata` and spins.
       overlays?.install();
-      overlays?.setVisibility(curLayers);
     } catch (e) {
       console.error("[diag] overlays install failed:", (e as Error)?.message ?? e);
     }
 
-    const font = styleFont();
     const dark = themeFor(activeBasemap).dark;
     const iconSize: any = [
       "interpolate",
@@ -304,15 +342,18 @@
     }
 
     if (!map.getLayer("aircraft-halo")) {
+      // Radius/opacity are expression-driven: `selected` comes from feature-state
+      // (set on click, no geometry rebuild), `emergency` from the feature props.
+      const selected: any = ["boolean", ["feature-state", "selected"], false];
+      const emerg: any = ["boolean", ["get", "emergency"], false];
       map.addLayer({
         id: "aircraft-halo",
         type: "circle",
         source: "aircraft",
-        filter: ["any", ["get", "selected"], ["get", "emergency"]],
         paint: {
-          "circle-radius": 14,
-          "circle-color": ["case", ["get", "emergency"], "#ff3b30", "#4c9be8"],
-          "circle-opacity": 0.22,
+          "circle-radius": ["case", selected, 15, emerg, 13, 0],
+          "circle-color": ["case", emerg, "#ff3b30", "#4c9be8"],
+          "circle-opacity": ["case", ["any", selected, emerg], 0.22, 0] as any,
         },
       });
     }
@@ -374,7 +415,7 @@
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
           "text-field": ["step", ["zoom"], "", 6, ["get", "callsign"]],
-          "text-font": font,
+          "text-font": styleFont(),
           "text-size": 10,
           "text-offset": [0, 1.5],
           "text-anchor": "top",
@@ -536,21 +577,46 @@
     map.addControl(new maplibregl.ScaleControl({ unit: "nautical" }), "bottom-left");
 
     // `load` fires on the initial style; `style.load` after a setStyle(); and
-    // `styledata` covers edge cases where neither fires as expected. All three
-    // funnel through the idempotent installer.
-    const onStyleReady = () => {
+    // `styledata` fires many times per style change. Keeping the app's layers
+    // present is cheap + idempotent and runs on every `styledata`; the heavy
+    // work (viewport push, overlay refetch, visibility, selection) is coalesced
+    // into one trailing pass so the `styledata` burst from addLayer/setStyle
+    // doesn't run it a dozen times.
+    const ensureLayers = () => {
       installLayers();
       installInteractions();
+    };
+    let settleRetries = 0;
+    const afterStyleSettled = () => {
+      if (!map) return;
+      if (!map.isStyleLoaded() && settleRetries < 20) {
+        settleRetries++;
+        styleSettleTimer = window.setTimeout(afterStyleSettled, 90);
+        return;
+      }
+      settleRetries = 0;
+      ensureLayers();
+      overlays?.setVisibility(curLayers);
+      overlays?.setRangeRings(get(home), get(rangeRingsNm), curLayers.rangeRings);
+      syncSelected();
       pushViewport();
       refreshOverlays();
     };
-    map.on("load", onStyleReady);
-    map.on("style.load", onStyleReady);
-    map.on("styledata", onStyleReady);
+    const onStyleEvent = () => {
+      ensureLayers();
+      settleRetries = 0;
+      if (styleSettleTimer) clearTimeout(styleSettleTimer);
+      styleSettleTimer = window.setTimeout(afterStyleSettled, 90);
+    };
+    map.on("load", onStyleEvent);
+    map.on("style.load", onStyleEvent);
+    map.on("styledata", onStyleEvent);
 
     unsubGeo = aircraftGeoJson.subscribe((fc) => {
       const src = map?.getSource("aircraft") as GeoJSONSource | undefined;
-      src?.setData(fc as any);
+      if (!src) return;
+      src.setData(fc as any);
+      syncSelected();
     });
     unsubAircraft = aircraft.subscribe(() => {
       followAircraft();
@@ -578,8 +644,11 @@
 
     map.on("moveend", scheduleViewport);
 
-    // Selected aircraft -> refresh its trail now and every few seconds.
-    unsubSel = selectedHex.subscribe(() => void refreshTrail());
+    // Selected aircraft -> highlight it, refresh its trail now and periodically.
+    unsubSel = selectedHex.subscribe(() => {
+      syncSelected();
+      void refreshTrail();
+    });
     trailTimer = window.setInterval(refreshTrail, 4000);
 
     unsubBasemap = basemap.subscribe((key) => {
@@ -690,6 +759,7 @@
     if (moveTimer) clearTimeout(moveTimer);
     if (trailTimer) clearInterval(trailTimer);
     if (overlayTimer) clearTimeout(overlayTimer);
+    if (styleSettleTimer) clearTimeout(styleSettleTimer);
     if (restoreBoundsTimer) clearTimeout(restoreBoundsTimer);
     unsubGeo?.();
     unsubSel?.();

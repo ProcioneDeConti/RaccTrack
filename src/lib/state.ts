@@ -75,7 +75,10 @@ export function applyDiff(diff: AircraftDiff): void {
   aircraft.update((m) => {
     for (const a of diff.added) m.set(a.hex, a);
     for (const a of diff.updated) m.set(a.hex, a);
-    for (const hex of diff.removed) m.delete(hex);
+    for (const hex of diff.removed) {
+      m.delete(hex);
+      iconMemo.delete(hex);
+    }
     return m;
   });
   total.set(diff.total);
@@ -86,8 +89,32 @@ export function resetAircraft(list: Aircraft[], totalCount: number): void {
   const m = new Map<string, Aircraft>();
   for (const a of list) m.set(a.hex, a);
   aircraft.set(m);
+  iconMemo.clear();
   total.set(totalCount);
   lastUpdate.set(Date.now());
+}
+
+// iconKindFor does Set lookups + regexes; its inputs (category/type are fixed
+// per airframe, onGround/hasHeading flip rarely) change far less often than the
+// 3 s position diff, so memoise the result per hex keyed by those inputs.
+const iconMemo = new Map<
+  string,
+  { sig: string; icon: string; sizeMul: number }
+>();
+
+function iconFor(
+  a: Aircraft,
+  hasHeading: boolean,
+): { icon: string; sizeMul: number } {
+  const sig = `${a.category ?? ""}|${a.typeCode ?? ""}|${a.onGround ? 1 : 0}|${
+    hasHeading ? 1 : 0
+  }`;
+  const hit = iconMemo.get(a.hex);
+  if (hit && hit.sig === sig) return hit;
+  const kind = iconKindFor(a.category, a.typeCode, a.onGround, hasHeading);
+  const entry = { sig, icon: `ac-${kind}`, sizeMul: sizeMulFor(kind) };
+  iconMemo.set(a.hex, entry);
+  return entry;
 }
 
 export interface AircraftFeature {
@@ -102,26 +129,27 @@ export interface AircraftFeature {
     color: string;
     callsign: string;
     altBaro: number | null;
-    selected: boolean;
     military: boolean;
     emergency: boolean;
   };
 }
 
-/** GeoJSON feed for the aircraft symbol layer, filtered by the active filters. */
+/**
+ * GeoJSON feed for the aircraft symbol layer, filtered by the active filters.
+ * Selection is *not* an input here — it's applied on the map via
+ * `setFeatureState` so clicking an aircraft doesn't rebuild every feature.
+ */
 export const aircraftGeoJson = derived(
-  [aircraft, filters, selectedHex],
-  ([$aircraft, $filters, $selected]) => {
+  [aircraft, filters],
+  ([$aircraft, $filters]) => {
     const features: AircraftFeature[] = [];
     for (const a of $aircraft.values()) {
       if (a.lat === null || a.lon === null) continue;
       if (!matchesFilters(a, $filters)) continue;
       const emergency = !!a.emergency && a.emergency !== "none";
       const heading = a.track ?? a.trueHeading ?? a.magHeading;
-      const kind = iconKindFor(
-        a.category,
-        a.typeCode,
-        a.onGround,
+      const { icon, sizeMul } = iconFor(
+        a,
         heading !== null && heading !== undefined,
       );
       features.push({
@@ -130,13 +158,12 @@ export const aircraftGeoJson = derived(
         geometry: { type: "Point", coordinates: [a.lon, a.lat] },
         properties: {
           hex: a.hex,
-          icon: `ac-${kind}`,
-          sizeMul: sizeMulFor(kind),
+          icon,
+          sizeMul,
           rotation: heading ?? 0,
           color: emergency ? "#ff3b30" : altColor(a.altBaro, a.onGround),
           callsign: (a.flight ?? a.registration ?? a.hex).trim(),
           altBaro: a.altBaro,
-          selected: a.hex === $selected,
           military: a.military,
           emergency,
         },
