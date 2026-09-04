@@ -4,6 +4,8 @@
   import type { DlMessage } from "../api/types";
   import { ACCENT } from "../theme/colors";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
+  import { humanizeError } from "../ui/errors";
 
   export let hex: string;
 
@@ -29,7 +31,7 @@
       msgs = await datalinkFor(hex);
       loaded = true;
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -74,11 +76,11 @@
     <button class="load" on:click={start} disabled={loading}>
       {loading ? "Loading…" : "Show recent ACARS / VDL messages"}
     </button>
-    {#if error}<p class="err">{error}</p>{/if}
+    {#if error}<Message kind="error" onRetry={refresh}>{error}</Message>{/if}
   {:else if error && !msgs.length}
-    <p class="err">{error}</p>
+    <Message kind="error" onRetry={refresh}>{error}</Message>
   {:else if !msgs.length}
-    <p class="muted">No recent datalink messages for this aircraft.</p>
+    <Message kind="empty">No recent datalink messages for this aircraft.</Message>
   {:else}
     <ul class="dl">
       {#each msgs as m}
@@ -196,12 +198,5 @@
     font-size: 10px;
     color: var(--text-dim);
     margin: 6px 0 0;
-  }
-  .err {
-    color: var(--emergency);
-    font-size: 12px;
-  }
-  .muted {
-    color: var(--text-dim);
   }
 </style>

@@ -14,6 +14,7 @@
   import { distanceNm, fmtDistanceNm } from "../geo";
   import Icon from "../ui/Icon.svelte";
   import Panel from "../ui/Panel.svelte";
+  import Message from "../ui/Message.svelte";
 
   export let onClose: () => void;
 
@@ -137,7 +138,7 @@
       </tbody>
     </table>
     {#if rows.length === 0}
-      <p class="empty">No aircraft in view.</p>
+      <Message kind="empty">No aircraft in view.</Message>
     {/if}
 </Panel>
 
@@ -230,11 +231,5 @@
   td.pin button.on {
     color: var(--accent);
     opacity: 1;
-  }
-  .empty {
-    padding: 16px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 12px;
   }
 </style>

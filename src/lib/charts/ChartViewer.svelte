@@ -4,6 +4,8 @@
   import { airportCharts, chartPdf, openExternal } from "../api/backend";
   import type { ChartRef, ChartSet } from "../api/types";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
+  import { humanizeError } from "../ui/errors";
 
   let target: { ident: string; label: string } | null = null;
   let set: ChartSet | null = null;
@@ -79,7 +81,7 @@
       flat = groups.flatMap((g) => g.charts);
       if (flat.length) void pick(flat[0]);
     } catch (e) {
-      listError = String(e);
+      listError = humanizeError(e);
     } finally {
       if (chartTargetIdent() === ident) listLoading = false;
     }
@@ -101,7 +103,7 @@
         new Blob([buf], { type: "application/pdf" }),
       );
     } catch (e) {
-      pdfError = String(e);
+      pdfError = humanizeError(e);
     } finally {
       if (selected === c) pdfLoading = false;
     }
@@ -156,11 +158,14 @@
       <div class="body">
         <nav class="picker">
           {#if listLoading}
-            <p class="dim pad">Loading chart index…</p>
+            <Message kind="loading">Loading chart index…</Message>
           {:else if listError}
-            <p class="err pad">{listError}</p>
+            <Message
+              kind="error"
+              onRetry={() => target && load(target.ident)}>{listError}</Message
+            >
           {:else if !flat.length}
-            <p class="dim pad">No published charts for this airport.</p>
+            <Message kind="empty">No published charts for this airport.</Message>
           {:else}
             {#each groups as g}
               <h4>{g.name}</h4>
@@ -208,8 +213,7 @@
               <p class="dim center">Loading chart…</p>
             {:else if pdfError}
               <div class="center">
-                <p class="err">Couldn’t load this chart.</p>
-                <p class="dim">{pdfError}</p>
+                <Message kind="error">{pdfError}</Message>
                 {#if selected}
                   <button class="ib" on:click={openSelected}>
                     Open in browser instead <Icon name="external-link" size={13} />
@@ -369,11 +373,5 @@
     justify-content: center;
     gap: 6px;
     text-align: center;
-  }
-  .pad {
-    padding: 10px;
-  }
-  .err {
-    color: var(--emergency);
   }
 </style>

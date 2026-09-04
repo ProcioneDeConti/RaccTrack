@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import Panel from "../ui/Panel.svelte";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
   import { recentEvents, onAircraftEvent, clearHistory } from "../api/backend";
   import { aircraft, selectedHex, flyTo } from "../state";
   import type { AircraftEvent } from "../api/types";
@@ -65,7 +66,7 @@
 
 <Panel title="Events & history" {onClose} width={330} bodyPad={false}>
   <svelte:fragment slot="actions">
-    <button class="link" on:click={wipe} title="Delete all history">Clear</button>
+    <button class="btn-link" on:click={wipe} title="Delete all history">Clear</button>
   </svelte:fragment>
 
   <div class="chips">
@@ -78,13 +79,13 @@
 
   <div class="scroll">
     {#if loading}
-      <p class="muted">Loading…</p>
+      <Message kind="loading">Loading…</Message>
     {:else if shown.length === 0}
-      <p class="muted">
+      <Message kind="empty">
         {all.length === 0
           ? "No events recorded yet. Squawk changes, takeoffs/landings and emergency squawks show up here as they happen."
           : "Nothing matches this filter."}
-      </p>
+      </Message>
     {:else}
       <ul>
         {#each shown as e}
@@ -103,13 +104,6 @@
 </Panel>
 
 <style>
-  .link {
-    border: none;
-    background: transparent;
-    color: var(--accent);
-    font-size: 12px;
-    padding: 2px 4px;
-  }
   .chips {
     display: flex;
     flex-wrap: wrap;
@@ -128,11 +122,6 @@
   }
   .scroll {
     padding: 4px;
-  }
-  .muted {
-    color: var(--text-dim);
-    font-size: 12px;
-    padding: 12px;
   }
   ul {
     list-style: none;

@@ -3,6 +3,7 @@
   import { aircraftHistory, onAircraftEvent } from "../api/backend";
   import type { AircraftEvent } from "../api/types";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
   import { eventIcon, eventText, eventTime, eventIsUrgent } from "./events";
 
   export let hex: string;
@@ -35,12 +36,12 @@
 <section>
   <h4>History</h4>
   {#if loading && events.length === 0}
-    <p class="muted">Loading…</p>
+    <Message kind="loading">Loading…</Message>
   {:else if events.length === 0}
-    <p class="muted">
+    <Message kind="empty">
       Nothing recorded yet — squawk / callsign / takeoff / landing changes show
       up here while the app is running.
-    </p>
+    </Message>
   {:else}
     <ul>
       {#each events as e}
@@ -90,9 +91,5 @@
   }
   li.urgent :global(svg) {
     color: var(--emergency);
-  }
-  .muted {
-    color: var(--text-dim);
-    font-size: 11px;
   }
 </style>

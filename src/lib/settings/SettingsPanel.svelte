@@ -19,6 +19,7 @@
   import { clipToRegion, type Bbox } from "../map/region";
   import Icon from "../ui/Icon.svelte";
   import Panel from "../ui/Panel.svelte";
+  import { humanizeError } from "../ui/errors";
 
   export let onClose: () => void;
   export let currentBbox: () => Bbox | null;
@@ -71,7 +72,7 @@
       homeResults = await geocode(q);
       if (homeResults.length === 0) homeError = "No matches.";
     } catch (e) {
-      homeError = String(e);
+      homeError = humanizeError(e);
     } finally {
       homeSearching = false;
     }

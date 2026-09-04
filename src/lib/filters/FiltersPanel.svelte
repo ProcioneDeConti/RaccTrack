@@ -20,7 +20,7 @@
 
 <Panel title="Filters" {onClose} width={260}>
   <svelte:fragment slot="actions">
-    <button class="link" on:click={reset} disabled={isDefault(f)}>Reset</button>
+    <button class="btn-link" on:click={reset} disabled={isDefault(f)}>Reset</button>
   </svelte:fragment>
 
   <h4 class="row">
@@ -82,16 +82,5 @@
     text-transform: none;
     letter-spacing: 0;
     color: var(--text-dim);
-  }
-  .link {
-    border: none;
-    background: transparent;
-    color: var(--accent);
-    font-size: 12px;
-    padding: 2px 4px;
-  }
-  .link:disabled {
-    color: var(--text-dim);
-    opacity: 0.6;
   }
 </style>

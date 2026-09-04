@@ -6,6 +6,8 @@
   import { altitude } from "../format";
   import { decodeMetar, decodeTaf } from "../wx/metar";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
+  import { humanizeError } from "../ui/errors";
   import {
     FLIGHT_CATEGORY_COLORS,
     FLIGHT_CATEGORY_FALLBACK,
@@ -19,6 +21,7 @@
   let info: AirportInfo | null = null;
   let wx: StationWx | null = null;
   let loading = false;
+  let error: string | null = null;
   let current: string | null = null;
 
   const unsub = selectedAirport.subscribe((code) => {
@@ -26,12 +29,14 @@
     current = code;
     info = null;
     wx = null;
+    error = null;
     if (code) void load(code);
   });
   onDestroy(unsub);
 
   async function load(code: string) {
     loading = true;
+    error = null;
     try {
       const i = await airportInfo(code);
       if (current !== code) return; // selection changed while awaiting
@@ -42,6 +47,8 @@
       );
       if (current !== code) return;
       wx = w;
+    } catch (e) {
+      if (current === code) error = humanizeError(e);
     } finally {
       if (current === code) loading = false;
     }
@@ -118,9 +125,11 @@
     </header>
 
     {#if loading && !info}
-      <p class="muted">Loading…</p>
+      <Message kind="loading">Loading…</Message>
+    {:else if error}
+      <Message kind="error" onRetry={() => current && load(current)}>{error}</Message>
     {:else if !info}
-      <p class="muted">No data for {current}.</p>
+      <Message kind="empty">No airport data for {current}.</Message>
     {:else}
       <p class="name">{info.name}</p>
       <p class="muted sub">
@@ -173,7 +182,7 @@
           {/if}
         </h4>
         {#if wx === null}
-          <p class="muted">Loading…</p>
+          <Message kind="loading">Loading…</Message>
         {:else if wx.metar}
           {#if decoded}
             <dl class="decoded">

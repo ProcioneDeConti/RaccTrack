@@ -15,6 +15,8 @@
   import RouteProgress from "./RouteProgress.svelte";
   import HistorySection from "../history/HistorySection.svelte";
   import Icon from "../ui/Icon.svelte";
+  import Message from "../ui/Message.svelte";
+  import { humanizeError } from "../ui/errors";
   import {
     altitude,
     speed,
@@ -59,7 +61,7 @@
         }
       }
     } catch (e) {
-      error = String(e);
+      error = humanizeError(e);
     } finally {
       loading = false;
     }
@@ -230,9 +232,9 @@
     </header>
 
     {#if loading && !detail}
-      <p class="muted">Loading…</p>
+      <Message kind="loading">Loading…</Message>
     {:else if error}
-      <p class="err">{error}</p>
+      <Message kind="error" onRetry={() => currentHex && load(currentHex)}>{error}</Message>
     {/if}
 
     <section>
@@ -277,7 +279,7 @@
       {#if detail?.route && (detail.route.originIcao || detail.route.destinationIcao)}
         <RouteProgress {detail} {prog} />
       {:else}
-        <p class="muted">Unknown</p>
+        <Message kind="empty">No route on file for this flight.</Message>
       {/if}
     </section>
 
@@ -520,9 +522,6 @@
     display: inline-block;
     vertical-align: middle;
     color: var(--text-dim);
-  }
-  .err {
-    color: var(--emergency);
   }
   footer {
     margin-top: 12px;
