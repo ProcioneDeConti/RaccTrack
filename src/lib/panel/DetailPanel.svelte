@@ -38,6 +38,8 @@
     detail = null;
     error = null;
     photoIdx = 0;
+    progCache = null;
+    lastLine = null;
     routeLine.set(null);
     if (hex) void load(hex);
   });
@@ -85,8 +87,32 @@
     : null;
 
   // --- route progress ---
-  $: prog = computeProgress(detail, live);
-  $: routeLine.set(prog?.line ?? null);
+  // computeProgress calls gcPath(…,96) + projectOntoTrack; `live` is a fresh
+  // object every 3 s diff, so memoise on the inputs that actually move the
+  // needle (route endpoints + the aircraft's position/speed).
+  let progCache: { sig: string; value: ReturnType<typeof computeProgress> } | null = null;
+  let lastLine: unknown = null;
+
+  $: prog = memoProgress(detail, live);
+  $: {
+    const line = prog?.line ?? null;
+    if (line !== lastLine) {
+      lastLine = line;
+      routeLine.set(line);
+    }
+  }
+
+  function memoProgress(d: AircraftDetail | null, l: typeof live) {
+    const r = d?.route;
+    const sig = r
+      ? `${r.originLat},${r.originLon},${r.destinationLat},${r.destinationLon}|` +
+        `${l?.lat ?? ""},${l?.lon ?? ""},${l?.groundSpeed ?? ""}`
+      : "none";
+    if (progCache && progCache.sig === sig) return progCache.value;
+    const value = computeProgress(d, l);
+    progCache = { sig, value };
+    return value;
+  }
 
   function computeProgress(d: AircraftDetail | null, l: typeof live) {
     const r = d?.route;

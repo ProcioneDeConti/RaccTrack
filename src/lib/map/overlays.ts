@@ -46,6 +46,32 @@ export class Overlays {
    *  because a fresh style resets every layer to visible. */
   private visState: Record<string, boolean> = {};
 
+  /** Per-kind record of the last successful fetch, so panning back over an
+   *  area we already have doesn't refetch. Cleared on a real style swap. */
+  private fetched: Record<string, { bbox: Bbox; zb: number; at: number }> = {};
+
+  private zoomBucket(): number {
+    const z = this.map.getZoom();
+    return z < 6 ? 0 : z < 9 ? 1 : 2;
+  }
+
+  private haveFresh(kind: string, bbox: Bbox, ttlMs: number): boolean {
+    const c = this.fetched[kind];
+    return (
+      !!c &&
+      c.zb === this.zoomBucket() &&
+      Date.now() - c.at < ttlMs &&
+      bbox.west >= c.bbox.west &&
+      bbox.south >= c.bbox.south &&
+      bbox.east <= c.bbox.east &&
+      bbox.north <= c.bbox.north
+    );
+  }
+
+  private noteFetch(kind: string, bbox: Bbox) {
+    this.fetched[kind] = { bbox, zb: this.zoomBucket(), at: Date.now() };
+  }
+
   constructor(map: MlMap) {
     this.map = map;
   }
@@ -53,9 +79,12 @@ export class Overlays {
   /** Idempotent — safe to call on every style.load. */
   install(beforeId?: string) {
     const m = this.map;
-    // A style swap wipes every layer; only then does the visibility cache go
-    // stale (fresh layers default to visible).
-    if (!m.getLayer("ov-airport-dot")) this.visState = {};
+    // A style swap wipes every layer + source data; only then do the caches go
+    // stale (fresh layers default to visible; sources are re-added empty).
+    if (!m.getLayer("ov-airport-dot")) {
+      this.visState = {};
+      this.fetched = {};
+    }
     if (!m.getSource("ov-airspace")) {
       m.addSource("ov-airspace", { type: "geojson", data: EMPTY as any });
     }
@@ -212,7 +241,7 @@ export class Overlays {
   async refresh(bbox: Bbox, layers: MapLayers) {
     const zoom = this.map.getZoom();
 
-    if (layers.weather && zoom >= 5.5) {
+    if (layers.weather && zoom >= 5.5 && !this.haveFresh("weather", bbox, 120_000)) {
       try {
         const metars = await metarsIn(bbox);
         this.fltCat.clear();
@@ -220,28 +249,35 @@ export class Overlays {
           if (m.flightCategory) this.fltCat.set(m.icao.toUpperCase(), m.flightCategory);
         }
         this.applyAirportData();
+        this.noteFetch("weather", bbox);
       } catch {
         /* keep last */
       }
     }
-    if (layers.airports) {
+    if (layers.airports && !this.haveFresh("airports", bbox, 300_000)) {
       try {
         this.lastAirports = await airportsIn(bbox, zoom < 6 ? 150 : 800);
         this.applyAirportData();
+        this.noteFetch("airports", bbox);
       } catch {
         /* keep last */
       }
     }
-    if (layers.airspace && zoom >= 6.5) {
+    if (
+      layers.airspace &&
+      zoom >= 6.5 &&
+      !this.haveFresh("airspace", bbox, 600_000)
+    ) {
       try {
         const fc = await airspaceIn(bbox);
         (this.map.getSource("ov-airspace") as GeoJSONSource | undefined)?.setData(
           fc,
         );
+        this.noteFetch("airspace", bbox);
       } catch {
         /* keep last */
       }
-    } else if (layers.airspace) {
+    } else if (layers.airspace && zoom < 6.5) {
       (this.map.getSource("ov-airspace") as GeoJSONSource | undefined)?.setData(
         EMPTY as any,
       );
