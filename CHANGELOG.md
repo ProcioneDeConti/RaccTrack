@@ -8,6 +8,43 @@ app is pre-1.0, a minor bump may still include breaking changes.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- ATC voice audio via RTL-SDR: tune to a VHF airband frequency (from an
+  airport's frequency list) or scan across several, with session recording
+  to WAV. Shares a dongle with direct ADS-B decoding via a pause/resume
+  handoff when only one is available.
+- ACARS message decoding via RTL-SDR — reuses the ATC voice AM demod path,
+  adding MSK bit recovery and ARINC 618 message framing.
+- Direct UAT (978MHz) reception via RTL-SDR — a second ADS-B band used by
+  US GA aircraft below 18,000ft, merged into the aircraft list like the
+  existing 1090ES decoder. Aircraft-transmitted messages only.
+- Legacy ATCRBS Mode A/C detection via RTL-SDR: a "Mode A/C contacts" panel
+  listing nearby unidentified transponder replies. These carry no ICAO
+  address or position, so they're a plain list (possible squawk, possible
+  altitude, reply count), not map markers.
+- PIA / interesting / LADD badges on the aircraft detail panel, alongside
+  the existing MIL badge.
+
+### Changed
+
+- The aircraft info-chip (callsign + altitude map label) now renders via a
+  single deck.gl overlay instead of several independent MapLibre symbol
+  layers, fixing intermittent orphaned-badge/collision glitches.
+
+### Fixed
+
+- Direct RTL-SDR decode could misread an in-progress ACAS/TCAS resolution
+  advisory broadcast as a false emergency squawk.
+- Emergency-squawk alerts could repeat indefinitely for one standing
+  emergency, traced to three independent causes: the NA-wide squawk watch's
+  dedup didn't survive an app restart, the in-viewport check's dedup reset
+  on ordinary viewport churn, and per-aircraft transition detection reset
+  whenever a reception gap briefly dropped the aircraft from tracking. All
+  three now share one persisted, restart- and gap-resistant record.
+
 ## [0.2.0] - 2026-09-05
 
 ### Added
@@ -47,5 +84,6 @@ aircraft detail panel with photos/routes, airport reference layers, offline
 tile caching, and flight history logging. See `git log` for the detailed
 history predating formal versioning.
 
-[Unreleased]: https://github.com/ProcioneDeConti/RaccTrack/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/ProcioneDeConti/RaccTrack/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ProcioneDeConti/RaccTrack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ProcioneDeConti/RaccTrack/releases/tag/v0.2.0
