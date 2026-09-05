@@ -109,11 +109,7 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // --- persistence ---
-            let data_dir = handle
-                .path()
-                .app_data_dir()
-                .expect("resolve app data dir");
-            std::fs::create_dir_all(&data_dir).ok();
+            let data_dir = crate::util::resolve_data_dir(&handle).expect("resolve data dir");
             let db = Arc::new(Db::open(&data_dir.join("racctrack.sqlite"))?);
 
             let settings = Arc::new(Mutex::new(AppSettings::load(&db)));

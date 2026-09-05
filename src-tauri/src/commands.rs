@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::alerts::{WatchEntry, WatchKind};
 use crate::app::AppState;
@@ -330,8 +330,7 @@ pub async fn fix_usb_driver(app: AppHandle) -> CmdResult<()> {
         .await
         .map_err(err)?;
 
-    let dir = app.path().app_data_dir().map_err(err)?;
-    std::fs::create_dir_all(&dir).map_err(err)?;
+    let dir = crate::util::resolve_data_dir(&app).map_err(err)?;
     let exe_path = dir.join("zadig.exe");
     std::fs::write(&exe_path, &bytes).map_err(err)?;
 
