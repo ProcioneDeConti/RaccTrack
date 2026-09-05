@@ -15,6 +15,32 @@ use crate::util::now_ms;
 
 const EMERGENCY_SQUAWKS: [&str; 4] = ["7500", "7600", "7700", "7777"];
 
+/// Dedup key + TTL for "already alerted on this emergency", shared with
+/// `emergency_watch.rs`'s NA-wide poll (same `kv_cache` row) so:
+/// - the two independent emergency-detection paths (this in-viewport diff
+///   check, and the NA-wide poll that runs regardless of viewport) don't
+///   both alert on the same standing emergency — whichever sees it first
+///   claims the row, and the other finds it already fresh;
+/// - a hex that briefly drops out of the diff (`diff.removed`, e.g. a
+///   reception gap near the edge of the viewport) and reappears doesn't
+///   look "new" again — this `evaluate`'s own `fired` set used to get
+///   cleared on every `diff.removed`, which is right for watch/geofence
+///   alerts (re-entering an area *should* re-alert) but was wrong for a
+///   squawk that was never actually cleared, just briefly out of view;
+/// - it survives an app restart, since a real stuck/erroneous emergency
+///   squawk can sit there for a very long time (confirmed case: one
+///   aircraft squawking continuously for a full day).
+///
+/// The row is refreshed every time the emergency is still observed, and
+/// explicitly cleared the moment it's observed *not* emergency anymore (see
+/// `evaluate` below) — so it measures time since last seen still-emergency,
+/// not time since the first alert.
+pub(crate) const EMERGENCY_ALREADY_ALERTED_TTL_MS: i64 = 24 * 3600 * 1000;
+
+pub(crate) fn emergency_kv_key(hex: &str) -> String {
+    format!("emergency_watch:{hex}")
+}
+
 /// Great-circle distance in nautical miles.
 fn haversine_nm(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let r = 3440.065_f64; // earth radius, nm
@@ -133,8 +159,17 @@ pub struct AlertEvent {
 
 pub struct Alerts {
     db: Arc<Db>,
-    /// (hex, watch_id or -1 for emergency) already alerted this appearance.
+    /// (hex, watch_id) already alerted this appearance — watch/geofence
+    /// alerts only; the emergency check has its own persisted dedup (see
+    /// `emergency_kv_key`).
     fired: Mutex<HashSet<(String, i64)>>,
+    /// Hexes this process has itself seen go emergency -> cleared, so the
+    /// (almost always empty) "clear the kv row" step in `evaluate` only
+    /// issues a real delete for hexes that might actually have one, instead
+    /// of a wasted write to `db` for every non-emergency aircraft in every
+    /// diff. Just an optimization — if the app restarts mid-emergency and
+    /// it clears afterward, the stale kv row simply ages out on its own TTL.
+    emergency_marked: Mutex<HashSet<String>>,
 }
 
 impl Alerts {
@@ -142,6 +177,7 @@ impl Alerts {
         Self {
             db,
             fired: Mutex::new(HashSet::new()),
+            emergency_marked: Mutex::new(HashSet::new()),
         }
     }
 
@@ -248,20 +284,37 @@ impl Alerts {
                     .map(|e| !e.eq_ignore_ascii_case("none"))
                     .unwrap_or(false);
 
-            if emergency && self.mark(&ac.hex, -1) {
-                out.push(AlertEvent {
-                    hex: ac.hex.clone(),
-                    reason: match ac.squawk.as_deref() {
-                        Some("7500") => "squawk 7500 — unlawful interference".into(),
-                        Some("7600") => "squawk 7600 — radio failure".into(),
-                        Some("7700") => "squawk 7700 — general emergency".into(),
-                        Some(s) => format!("emergency (squawk {s})"),
-                        None => "emergency indication".into(),
-                    },
-                    watch_id: None,
-                    emergency: true,
-                    at: now,
-                });
+            let kv_key = emergency_kv_key(&ac.hex);
+            if emergency {
+                let already_alerted = self
+                    .db
+                    .kv_get(&kv_key, EMERGENCY_ALREADY_ALERTED_TTL_MS)
+                    .ok()
+                    .flatten()
+                    .is_some();
+                if !already_alerted {
+                    out.push(AlertEvent {
+                        hex: ac.hex.clone(),
+                        reason: match ac.squawk.as_deref() {
+                            Some("7500") => "squawk 7500 — unlawful interference".into(),
+                            Some("7600") => "squawk 7600 — radio failure".into(),
+                            Some("7700") => "squawk 7700 — general emergency".into(),
+                            Some(s) => format!("emergency (squawk {s})"),
+                            None => "emergency indication".into(),
+                        },
+                        watch_id: None,
+                        emergency: true,
+                        at: now,
+                    });
+                }
+                let _ = self.db.kv_put(&kv_key, ac.squawk.as_deref().unwrap_or(""));
+                self.emergency_marked.lock().insert(ac.hex.clone());
+            } else if self.emergency_marked.lock().remove(&ac.hex) {
+                // Observed present and *not* emergency, having previously
+                // been emergency — it's genuinely cleared, so a future
+                // emergency on this hex should alert fresh rather than
+                // waiting out the TTL.
+                let _ = self.db.kv_delete(&kv_key);
             }
 
             for w in watches.iter().filter(|w| w.enabled) {
@@ -415,7 +468,11 @@ mod tests {
         );
         assert!(ev.is_empty());
 
-        // Leaves and returns -> fires again.
+        // Leaves view (e.g. a brief reception gap) and returns *still on the
+        // same emergency squawk* -> does NOT fire again. A real recurring
+        // false positive (same standing emergency squawk re-alerting every
+        // time an aircraft blipped in and out of the diff) was reported and
+        // traced to exactly this case firing incorrectly.
         let ev = a.evaluate(
             &AircraftDiff {
                 removed: vec!["abc".into()],
@@ -424,6 +481,16 @@ mod tests {
             &[],
         );
         assert!(ev.is_empty());
+        let ev = a.evaluate(&diff_with(vec![ac.clone()]), &[]);
+        assert!(ev.is_empty());
+
+        // Squawk genuinely clears...
+        let mut cleared = ac.clone();
+        cleared.squawk = Some("1200".into());
+        let ev = a.evaluate(&diff_with(vec![cleared]), &[]);
+        assert!(ev.is_empty());
+
+        // ...then a fresh emergency on the same hex fires again.
         let ev = a.evaluate(&diff_with(vec![ac]), &[]);
         assert_eq!(ev.len(), 1);
     }

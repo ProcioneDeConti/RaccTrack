@@ -204,6 +204,7 @@ pub fn run() {
                 http.clone(),
                 settings.clone(),
                 history.clone(),
+                db.clone(),
             ));
             tauri::async_runtime::spawn(ewatch.run(handle.clone()));
 

@@ -290,7 +290,18 @@ impl Poller {
 
         if self.settings.lock().history_enabled {
             let mut events = std::mem::take(&mut diff.events);
-            for a in &alerts {
+            for a in alerts.iter().filter(|a| !a.emergency) {
+                // Emergency AlertEvents are deliberately not turned into a
+                // second history row here — `diff.events` (from
+                // `state::detect_events`, above) already recorded an
+                // `EventKind::Emergency`/`EmergencyClear` entry for the same
+                // transition, correctly categorized for the Events panel's
+                // "Emergency" filter and paired with its own clear event,
+                // which this alert-derived entry duplicated without either
+                // of those (it landed under "Watchlist" instead, with no
+                // "cleared" counterpart). The live toast notification is
+                // unaffected — that's the separate `app.emit("alert", ..)`
+                // loop below, which still runs for every alert.
                 events.push(AircraftEvent {
                     hex: a.hex.clone(),
                     at: a.at,

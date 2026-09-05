@@ -224,6 +224,13 @@ impl Db {
             Ok(())
         })
     }
+
+    pub fn kv_delete(&self, key: &str) -> Result<()> {
+        self.with_conn(|c| {
+            c.execute("DELETE FROM kv_cache WHERE key = ?1", [key])?;
+            Ok(())
+        })
+    }
 }
 
 #[cfg(test)]
