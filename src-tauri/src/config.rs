@@ -128,6 +128,13 @@ pub struct AppSettings {
     /// by far the most active one.
     #[serde(default = "default_acars_freqs")]
     pub acars_freqs: Vec<f64>,
+    /// Decode UAT (978MHz) directly off a dongle — a second ADS-B band,
+    /// mutually exclusive with `rtlsdr_enabled`/`atc`/`acars` on the same
+    /// physical device (only one frequency at a time per dongle).
+    #[serde(default)]
+    pub uat_enabled: bool,
+    #[serde(default)]
+    pub uat_device_index: u32,
     /// Master switch for the community aggregators (adsb.lol / adsb.fi).
     /// Off means *only* whatever local sources (RTL-SDR / local receiver)
     /// are enabled — no online lookups at all.
@@ -270,6 +277,8 @@ impl Default for AppSettings {
             atc_device_index: 0,
             acars_device_index: 0,
             acars_freqs: default_acars_freqs(),
+            uat_enabled: false,
+            uat_device_index: 0,
             rtlsdr_gain_tenths_db: None,
             online_sources_enabled: true,
             coverage_enabled: false,

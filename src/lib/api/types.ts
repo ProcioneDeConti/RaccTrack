@@ -383,6 +383,11 @@ export interface AppSettings {
   acarsDeviceIndex: number;
   /** VHF frequencies (MHz) ACARS listens on/scans across. */
   acarsFreqs: number[];
+  /** Decode UAT (978MHz) directly off a dongle — a second ADS-B band,
+   *  mutually exclusive with rtlsdrEnabled/ATC/ACARS on the same physical
+   *  device (only one frequency at a time per dongle). */
+  uatEnabled: boolean;
+  uatDeviceIndex: number;
   /** Master switch for the community aggregators (adsb.lol / adsb.fi). Off
    *  means local sources (RTL-SDR / local receiver) only — no online lookups. */
   onlineSourcesEnabled: boolean;
@@ -457,6 +462,15 @@ export interface AcarsStatus {
   squelchOpen: boolean;
   adsbPaused: boolean;
   messageCount: number;
+  lastError: string | null;
+}
+
+export interface UatStatus {
+  enabled: boolean;
+  deviceOpen: boolean;
+  framesFound: number;
+  messagesDecoded: number;
+  aircraftTracked: number;
   lastError: string | null;
 }
 

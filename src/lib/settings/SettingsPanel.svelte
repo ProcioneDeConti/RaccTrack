@@ -13,13 +13,14 @@
     testLocalReceiver,
     listRtlsdrDevices,
     rtlsdrStatus,
+    uatStatus,
     fixUsbDriver,
     computeCoverage,
     coverageProgress,
     type TileCacheStats,
     type DownloadProgress,
   } from "../api/backend";
-  import type { AppSettings, RtlSdrStatus, CoverageProgress } from "../api/types";
+  import type { AppSettings, RtlSdrStatus, UatStatus, CoverageProgress } from "../api/types";
   import { units } from "../format";
   import { basemap, uiTheme, coverageResult, coverageEnabled } from "../state";
   import { BASEMAP_THEMES } from "../map/style";
@@ -36,6 +37,8 @@
   let unlisten: (() => void) | undefined;
   let rtlStatus: RtlSdrStatus | null = null;
   let rtlStatusTimer: number | undefined;
+  let uatStat: UatStatus | null = null;
+  let uatStatusTimer: number | undefined;
 
   onMount(() => {
     void (async () => {
@@ -52,6 +55,11 @@
     };
     pollRtlStatus();
     rtlStatusTimer = window.setInterval(pollRtlStatus, 2000);
+    const pollUatStatus = () => {
+      void uatStatus().then((v) => (uatStat = v));
+    };
+    pollUatStatus();
+    uatStatusTimer = window.setInterval(pollUatStatus, 2000);
 
     // Resume watching an already-in-flight coverage compute — the backend
     // command isn't tied to this panel's lifecycle, so closing and
@@ -68,6 +76,7 @@
     return () => {
       unlisten?.();
       clearInterval(rtlStatusTimer);
+      clearInterval(uatStatusTimer);
       clearInterval(covProgressTimer);
     };
   });
@@ -428,6 +437,58 @@
             dongle can be bound to WinUSB — the same one-time step every SDR
             tool needs on Windows.
           </p>
+
+          <hr />
+          <h4>Direct UAT (978MHz)</h4>
+          <label class="row">
+            <span>Decode UAT ADS-B straight from a USB dongle</span>
+            <input
+              type="checkbox"
+              checked={s.uatEnabled}
+              on:change={(e) => patch({ uatEnabled: e.currentTarget.checked })}
+            />
+          </label>
+          {#if s.uatEnabled}
+            {#if uatStat}
+              <div class="row">
+                <span class="muted">Device</span>
+                <span
+                  class="rx"
+                  class:ok={uatStat.deviceOpen}
+                  class:bad={!uatStat.deviceOpen && !!uatStat.lastError}
+                >
+                  {#if uatStat.deviceOpen}
+                    Open — {uatStat.messagesDecoded.toLocaleString()} messages, {uatStat.aircraftTracked} aircraft
+                    ({uatStat.framesFound.toLocaleString()} sync hits)
+                  {:else if uatStat.lastError}
+                    {humanizeError(uatStat.lastError)}
+                  {:else}
+                    Connecting…
+                  {/if}
+                </span>
+              </div>
+            {/if}
+            {#if rtlDevices.length > 0}
+              <label class="row">
+                Device
+                <select
+                  value={s.uatDeviceIndex}
+                  on:change={(e) => patch({ uatDeviceIndex: +e.currentTarget.value })}
+                >
+                  {#each rtlDevices as d, i}
+                    <option value={i}>{d}</option>
+                  {/each}
+                </select>
+              </label>
+            {/if}
+            <p class="muted">
+              A second ADS-B band used by US GA aircraft below 18,000ft —
+              needs its own dongle (or an unused one) if direct RTL-SDR
+              1090ES/ATC/ACARS reception is also on, since one dongle can
+              only tune to one frequency at a time. Aircraft-transmitted
+              messages only — no ground-station weather/traffic uplink.
+            </p>
+          {/if}
 
           <hr />
           <h4>Reception coverage estimate</h4>

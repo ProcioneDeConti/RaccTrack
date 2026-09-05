@@ -12,6 +12,7 @@ import type {
   AtcStatus,
   AcarsStatus,
   AcarsMessage,
+  UatStatus,
   CoverageResult,
   CoverageProgress,
   Sighting,
@@ -145,6 +146,10 @@ export function acarsMessages(): Promise<AcarsMessage[]> {
 
 export function acarsClearMessages(): Promise<void> {
   return invoke("acars_clear_messages");
+}
+
+export function uatStatus(): Promise<UatStatus> {
+  return invoke("uat_status");
 }
 
 export function computeCoverage(): Promise<CoverageResult> {

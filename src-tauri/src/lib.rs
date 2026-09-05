@@ -172,8 +172,10 @@ pub fn run() {
             let rtlsdr = Arc::new(RtlSdrSource::new(settings.clone()));
             let atc = Arc::new(atc::AtcListener::new(settings.clone(), rtlsdr.clone()));
             let acars = Arc::new(acars::AcarsListener::new(settings.clone(), rtlsdr.clone()));
+            let uat = Arc::new(ingest::uat::UatSource::new(settings.clone()));
             let sources: Vec<Arc<dyn AircraftSource>> = vec![
                 rtlsdr.clone(),
+                uat.clone(),
                 Arc::new(LocalReceiverSource::new(http.clone(), settings.clone())),
                 Arc::new(HttpV2Source::adsb_lol(http.clone())),
                 Arc::new(HttpV2Source::adsb_fi(http.clone())),
@@ -185,6 +187,7 @@ pub fn run() {
                 rtlsdr: rtlsdr.clone(),
                 atc: atc.clone(),
                 acars: acars.clone(),
+                uat: uat.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
                 history: history.clone(),
@@ -250,6 +253,7 @@ pub fn run() {
             commands::acars_status,
             commands::acars_messages,
             commands::acars_clear_messages,
+            commands::uat_status,
             commands::fix_usb_driver,
             commands::compute_coverage,
             commands::coverage_progress,

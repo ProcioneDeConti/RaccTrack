@@ -6,6 +6,7 @@
 pub mod local;
 pub mod model;
 pub mod rtlsdr;
+pub mod uat;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;

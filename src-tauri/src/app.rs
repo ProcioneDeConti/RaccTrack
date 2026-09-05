@@ -43,6 +43,8 @@ pub struct AppState {
     /// ACARS message decoding — see `acars/mod.rs`; shares a dongle with
     /// `rtlsdr`/`atc` the same way `atc` does.
     pub acars: Arc<AcarsListener>,
+    /// Direct UAT (978MHz) reception — see `ingest::uat`.
+    pub uat: Arc<crate::ingest::uat::UatSource>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,

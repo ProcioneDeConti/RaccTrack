@@ -260,6 +260,14 @@ pub fn acars_clear_messages(state: State<AppState>) {
     state.acars.clear_messages();
 }
 
+/// Live progress of the direct-UAT (978MHz) worker thread — same
+/// "enabled, but is the device actually open/decoding" distinction as
+/// `rtlsdr_status`.
+#[tauri::command]
+pub fn uat_status(state: State<AppState>) -> crate::ingest::uat::UatStatus {
+    state.uat.status()
+}
+
 #[derive(serde::Deserialize)]
 struct GithubAsset {
     name: String,
