@@ -68,6 +68,12 @@ export const atcStatus = writable<AtcStatus | null>(null);
 /** Same polling shape as `atcStatus`, for ACARS decoding. */
 export const acarsStatus = writable<AcarsStatus | null>(null);
 
+/** Whether at least one RTL-SDR dongle is currently plugged in (polled in
+ *  App.svelte via `listRtlsdrDevices`) — gates the visibility of every
+ *  RTL-SDR-only feature (ATC listen/scan, ACARS, Mode A/C) so they don't
+ *  show as dead buttons/panels when there's no hardware to back them. */
+export const rtlsdrConnected = writable(false);
+
 export const layers = writable<MapLayers>({
   airports: false,
   weather: false,

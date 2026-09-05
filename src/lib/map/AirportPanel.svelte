@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { selectedAirport, chartTarget, atcStatus } from "../state";
+  import { selectedAirport, chartTarget, atcStatus, rtlsdrConnected } from "../state";
   import {
     airportInfo,
     stationWx,
@@ -226,7 +226,7 @@
         <section>
           <h4>
             Frequencies
-            {#if airbandFreqs().length > 1}
+            {#if $rtlsdrConnected && airbandFreqs().length > 1}
               <button
                 class="scanall"
                 class:on={isScanningThis}
@@ -247,7 +247,7 @@
               </span>
               <span class="fv">
                 <strong>{f.mhz}</strong>
-                {#if parseFloat(f.mhz) >= 108 && parseFloat(f.mhz) <= 137}
+                {#if $rtlsdrConnected && parseFloat(f.mhz) >= 108 && parseFloat(f.mhz) <= 137}
                   <button
                     class="listen"
                     class:on={isTuned(f)}

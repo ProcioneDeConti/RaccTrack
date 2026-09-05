@@ -8,6 +8,7 @@
     primaryPlace,
     goHomeSignal,
     visibleAircraft,
+    rtlsdrConnected,
   } from "../state";
   import { isDefault } from "../filters/filters";
 
@@ -45,8 +46,15 @@
     { id: "passes", icon: "plane-takeoff", label: "Passes overhead" },
     { id: "events", icon: "activity", label: "Events & history" },
     { id: "logbook", icon: "book", label: "Spotter logbook" },
-    { id: "acars", icon: "message-square", label: "ACARS messages" },
-    { id: "modeac", icon: "crosshair", label: "Mode A/C contacts" },
+    // ACARS/Mode A/C only ever show data when an RTL-SDR is plugged in —
+    // hidden rather than shown-disabled so the rail doesn't advertise
+    // hardware-only features to users without a dongle at all.
+    ...($rtlsdrConnected
+      ? ([
+          { id: "acars", icon: "message-square", label: "ACARS messages" },
+          { id: "modeac", icon: "crosshair", label: "Mode A/C contacts" },
+        ] satisfies Item[])
+      : []),
   ] satisfies Item[];
 </script>
 

@@ -37,6 +37,7 @@
     coverageResult,
     atcStatus,
     acarsStatus,
+    rtlsdrConnected,
   } from "./lib/state";
   import {
     onDiff,
@@ -49,6 +50,7 @@
     computeCoverage,
     getAtcStatus,
     getAcarsStatus,
+    listRtlsdrDevices,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { horizonOpen } from "./lib/horizon";
@@ -167,12 +169,33 @@
     pollAcars();
     const acarsTimer = window.setInterval(pollAcars, 1000);
 
+    // Device presence changes rarely (a human plugging/unplugging a
+    // dongle), so this polls far slower than the status timers above.
+    const pollRtlsdrConnected = () => {
+      void listRtlsdrDevices()
+        .then((d) => rtlsdrConnected.set(d.length > 0))
+        .catch(() => rtlsdrConnected.set(false));
+    };
+    pollRtlsdrConnected();
+    const rtlsdrConnectedTimer = window.setInterval(pollRtlsdrConnected, 3000);
+
     return () => {
       unlisteners.forEach((p) => p.then((u) => u()));
       clearInterval(atcTimer);
       clearInterval(acarsTimer);
+      clearInterval(rtlsdrConnectedTimer);
     };
   });
+
+  // If the dongle backing the currently-open RTL-SDR-only panel disappears
+  // (unplugged, or this poll just catches up after launch), don't leave the
+  // user parked on a panel whose controls can no longer do anything.
+  $: if (
+    !$rtlsdrConnected &&
+    (panel === "acars" || panel === "modeac")
+  ) {
+    panel = "none";
+  }
 
   async function notify(body: string, title: string) {
     try {
