@@ -9,7 +9,7 @@ import type {
   MapGeoJSONFeature,
 } from "maplibre-gl";
 import type { Bbox } from "./region";
-import type { Airport, MapLayers, Metar } from "../api/types";
+import type { Airport, MapColors, MapLayers, Metar } from "../api/types";
 import { airportsIn, metarsIn, airspaceIn } from "../api/backend";
 import { selectedAirport, selectedHex } from "../state";
 import {
@@ -17,19 +17,48 @@ import {
   AIRSPACE_FALLBACK,
   FLIGHT_CATEGORY_COLORS,
   FLIGHT_CATEGORY_FALLBACK,
+  GEOFENCE_LINE_DEFAULT,
+  GEOFENCE_FILL_DEFAULT,
+  hexToRgba01,
 } from "../theme/colors";
+import { createFillLayer, type FillPolygon } from "./glFill";
 
 const EMPTY = { type: "FeatureCollection", features: [] } as const;
+const COVERAGE_LINE_COLOR = "#22d3ee";
+const COVERAGE_FILL_RGBA = hexToRgba01(COVERAGE_LINE_COLOR, 0.14);
 // 1x1 transparent PNG — the radar source needs *some* tile URL before the first
 // frame is fetched.
 const PLACEHOLDER_TILE =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==";
 
-function airspacePaintColor(): any {
+function airspacePaintColor(overrides: Record<string, string> = {}): any {
   const m: any[] = ["match", ["get", "category"]];
-  for (const [k, v] of Object.entries(AIRSPACE_STYLE)) m.push(k, v.color);
+  for (const [k, v] of Object.entries(AIRSPACE_STYLE)) m.push(k, overrides[k] ?? v.color);
   m.push(AIRSPACE_FALLBACK);
   return m;
+}
+
+export interface PlaceGeofence {
+  lat: number;
+  lon: number;
+  alert: {
+    enabled: boolean;
+    radiusNm: number;
+    /** [lat, lon] vertices — an open ring, >= 3 points to take effect. */
+    shape: [number, number][] | null;
+  };
+}
+
+/** Closed [lon, lat] ring for a place's alert geometry — its drawn polygon
+ *  when set, else a circle at its radius. Shared by the outline (line) and
+ *  the fill (custom WebGL layer) so the two always agree exactly. */
+function geofenceRing(p: PlaceGeofence): [number, number][] {
+  if (p.alert.shape && p.alert.shape.length >= 3) {
+    const pts = p.alert.shape.map(([lat, lon]) => [lon, lat] as [number, number]);
+    pts.push(pts[0]);
+    return pts;
+  }
+  return circle(p.lat, p.lon, p.alert.radiusNm);
 }
 
 function fltCatCircleColor(): any {
@@ -59,23 +88,132 @@ export class Overlays {
 
   /** Last place-alert ring FeatureCollection — survives style swaps. */
   private placeAlertData: unknown = null;
+  /** Last draft (in-progress hand-drawn geofence) FeatureCollection. */
+  private draftData: unknown = null;
+  /** User color overrides — airspace category overrides + geofence colors. */
+  private colorOverrides: MapColors = { airspace: {}, geofenceFill: null, geofenceLine: null };
+  private lastPlaces: PlaceGeofence[] = [];
+  /** Fills geofence interiors directly in WebGL — see glFill.ts for why this
+   *  exists instead of a normal `fill` layer. */
+  private fillLayer = createFillLayer("ov-place-alert-fill-gl");
+  /** Separate instance for the RTL-SDR coverage polygon — same technique,
+   *  independent lifecycle/color from place-alert geofences. */
+  private coverageFillLayer = createFillLayer("ov-coverage-fill-gl");
+  private coverageData: unknown = null;
 
-  /** Draw a dashed ring at each alert-enabled place's radius. */
-  setPlaceRings(places: { lat: number; lon: number; alert: { enabled: boolean; radiusNm: number } }[]) {
-    const features = places
-      .filter((p) => p.alert.enabled && Number.isFinite(p.lat) && Number.isFinite(p.lon))
-      .map((p) => ({
-        type: "Feature" as const,
-        geometry: {
-          type: "LineString" as const,
-          coordinates: circle(p.lat, p.lon, p.alert.radiusNm),
-        },
-        properties: {},
-      }));
+  /** Draw a dashed ring — and a translucent fill — at each alert-enabled
+   *  place's geometry (its drawn shape, or a circle at its radius). */
+  setPlaceRings(places: PlaceGeofence[]) {
+    this.lastPlaces = places;
+    const active = places.filter(
+      (p) => p.alert.enabled && Number.isFinite(p.lat) && Number.isFinite(p.lon),
+    );
+    const features = active.map((p) => ({
+      type: "Feature" as const,
+      geometry: { type: "LineString" as const, coordinates: geofenceRing(p) },
+      properties: {},
+    }));
     this.placeAlertData = { type: "FeatureCollection", features };
     (this.map.getSource("ov-place-alert") as GeoJSONSource | undefined)?.setData(
       this.placeAlertData as any,
     );
+
+    const fillColor = hexToRgba01(this.colorOverrides.geofenceFill ?? GEOFENCE_FILL_DEFAULT, 0.22);
+    const polygons: FillPolygon[] = active.map((p) => ({
+      ring: geofenceRing(p).slice(0, -1),
+      color: fillColor,
+    }));
+    this.fillLayer.setPolygons(polygons);
+    this.map.triggerRepaint();
+  }
+
+  /** Estimated RTL-SDR reception polygon — an irregular terrain-aware ring
+   *  (not a plain circle), same outline+WebGL-fill technique as place-alert
+   *  geofences but its own layer/color. `null` (or too few points) clears it. */
+  setCoverage(
+    result: {
+      receiverLat: number;
+      receiverLon: number;
+      points: { bearingDeg: number; distanceNm: number }[];
+    } | null,
+  ) {
+    const src = this.map.getSource("ov-coverage") as GeoJSONSource | undefined;
+    if (!result || result.points.length < 3) {
+      this.coverageData = EMPTY;
+      src?.setData(EMPTY as any);
+      this.coverageFillLayer.setPolygons([]);
+      this.map.triggerRepaint();
+      return;
+    }
+
+    const ring: [number, number][] = result.points.map((p) =>
+      destination(result.receiverLat, result.receiverLon, p.distanceNm, p.bearingDeg),
+    );
+    const closedRing = [...ring, ring[0]];
+
+    this.coverageData = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: closedRing },
+          properties: {},
+        },
+      ],
+    };
+    src?.setData(this.coverageData as any);
+    this.coverageFillLayer.setPolygons([{ ring, color: COVERAGE_FILL_RGBA }]);
+    this.map.triggerRepaint();
+  }
+
+  /** Live preview while the user is hand-drawing a geofence — outline +
+   *  vertex dots only (plain GeoJSON; a handful of points, no fill needed
+   *  mid-draw, and no risk of the tile-seam issue at that scale). */
+  setDraft(points: [number, number][]) {
+    const coords = points.map(([lat, lon]) => [lon, lat]);
+    const features: any[] = [];
+    if (coords.length >= 2) {
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: coords },
+        properties: {},
+      });
+    }
+    for (const c of coords) {
+      features.push({ type: "Feature", geometry: { type: "Point", coordinates: c }, properties: {} });
+    }
+    this.draftData = { type: "FeatureCollection", features };
+    (this.map.getSource("ov-geofence-draft") as GeoJSONSource | undefined)?.setData(
+      this.draftData as any,
+    );
+  }
+
+  /** Apply user color overrides (airspace categories + geofence) and
+   *  re-render anything they affect. */
+  setColors(colors: MapColors) {
+    this.colorOverrides = colors;
+    if (this.map.getLayer("ov-airspace-fill")) {
+      this.map.setPaintProperty(
+        "ov-airspace-fill",
+        "fill-color",
+        airspacePaintColor(colors.airspace),
+      );
+    }
+    if (this.map.getLayer("ov-airspace-line")) {
+      this.map.setPaintProperty(
+        "ov-airspace-line",
+        "line-color",
+        airspacePaintColor(colors.airspace),
+      );
+    }
+    if (this.map.getLayer("ov-place-alert-line")) {
+      this.map.setPaintProperty(
+        "ov-place-alert-line",
+        "line-color",
+        colors.geofenceLine ?? GEOFENCE_LINE_DEFAULT,
+      );
+    }
+    this.setPlaceRings(this.lastPlaces);
   }
 
   /** Point the radar layer at a new frame (or null before the first fetch). */
@@ -135,6 +273,18 @@ export class Overlays {
         data: (this.placeAlertData ?? EMPTY) as any,
       });
     }
+    if (!m.getSource("ov-geofence-draft")) {
+      m.addSource("ov-geofence-draft", {
+        type: "geojson",
+        data: (this.draftData ?? EMPTY) as any,
+      });
+    }
+    if (!m.getSource("ov-coverage")) {
+      m.addSource("ov-coverage", {
+        type: "geojson",
+        data: (this.coverageData ?? EMPTY) as any,
+      });
+    }
     if (!m.getSource("ov-radar")) {
       m.addSource("ov-radar", {
         type: "raster",
@@ -161,14 +311,14 @@ export class Overlays {
       id: "ov-airspace-fill",
       type: "fill",
       source: "ov-airspace",
-      paint: { "fill-color": airspacePaintColor(), "fill-opacity": 0.08 },
+      paint: { "fill-color": airspacePaintColor(this.colorOverrides.airspace), "fill-opacity": 0.08 },
     });
     add({
       id: "ov-airspace-line",
       type: "line",
       source: "ov-airspace",
       paint: {
-        "line-color": airspacePaintColor(),
+        "line-color": airspacePaintColor(this.colorOverrides.airspace),
         "line-width": 1.3,
         "line-opacity": 0.85,
       },
@@ -198,16 +348,55 @@ export class Overlays {
       },
     });
 
+    // Fill first so the dashed outline stays crisp on top of it.
+    if (!m.getLayer(this.fillLayer.id)) m.addLayer(this.fillLayer, beforeId);
     add({
       id: "ov-place-alert-line",
       type: "line",
       source: "ov-place-alert",
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#f0a020",
+        "line-color": this.colorOverrides.geofenceLine ?? GEOFENCE_LINE_DEFAULT,
         "line-width": 1.6,
         "line-dasharray": [2, 2],
         "line-opacity": 0.9,
+      },
+    });
+    add({
+      id: "ov-geofence-draft-line",
+      type: "line",
+      source: "ov-geofence-draft",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#4c9be8", "line-width": 1.8, "line-dasharray": [1, 1.5] },
+    });
+    add({
+      id: "ov-geofence-draft-point",
+      type: "circle",
+      source: "ov-geofence-draft",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 4,
+        "circle-color": "#4c9be8",
+        "circle-stroke-color": "#0d1117",
+        "circle-stroke-width": 1.2,
+      },
+    });
+
+    // Fill first so the dashed outline stays crisp on top of it (same
+    // ordering reasoning as the place-alert geofence fill above).
+    if (!m.getLayer(this.coverageFillLayer.id)) {
+      m.addLayer(this.coverageFillLayer, beforeId);
+    }
+    add({
+      id: "ov-coverage-line",
+      type: "line",
+      source: "ov-coverage",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": COVERAGE_LINE_COLOR,
+        "line-width": 1.6,
+        "line-dasharray": [4, 2],
+        "line-opacity": 0.85,
       },
     });
 

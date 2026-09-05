@@ -1,6 +1,6 @@
 [package]
 name = "racctrack-adsb"
-version = "0.1.0"
+version = "0.2.0"
 description = "RaccTrack (ADS-B) — free, no-paywall ADS-B flight tracker for North America"
 authors = ["ProcioneDeConti"]
 license = "Apache-2.0"
@@ -16,6 +16,19 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# Direct RTL-SDR dongle support: rs-rtl (MIT, pure-Rust USB device driver, no
+# libusb/C dep) for raw IQ capture; adsb_deku (MIT) for Mode S/ADS-B message
+# decode once we've demodulated bytes ourselves (see ingest/rtlsdr/demod.rs —
+# deliberately not using the GPL-licensed dump1090_rs/librtlsdr-rs).
+rs-rtl = "0.4"
+# crates.io 0.8.0 doesn't build (published against a deku range with a
+# breaking derive-macro incompatibility); master already carries the fix
+# (bumped its own deku requirement) but hasn't been cut as a release yet.
+adsb_deku = { git = "https://github.com/rsadsb/adsb_deku", branch = "master", package = "adsb_deku" }
+# Elevated-launch helper for the Settings "Fix USB driver" button (spawns a
+# downloaded Zadig with a UAC prompt — driver installation on Windows can't
+# go through a plain CreateProcess, it needs ShellExecute's "runas" verb).
+runas = "1.2"
 tauri = { version = "2", features = [] }
 tauri-plugin-notification = "2.4"
 tauri-plugin-os = "2.3"

@@ -52,6 +52,22 @@ export const AIRSPACE_STYLE: Record<string, AirspaceStyle> = {
 };
 export const AIRSPACE_FALLBACK = "#64748b";
 
+// --- Place-alert geofences -------------------------------------------------
+
+/** Default outline/fill colour for a place's proximity alert (circle or
+ *  user-drawn polygon) — user-overridable, see `AppSettings.colors`. */
+export const GEOFENCE_LINE_DEFAULT = "#f0a020";
+export const GEOFENCE_FILL_DEFAULT = "#f0a020";
+
+/** "#rrggbb" -> 0–1 RGBA, for feeding WebGL uniforms. */
+export function hexToRgba01(hex: string, alpha: number): [number, number, number, number] {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16) / 255;
+  const g = parseInt(h.slice(2, 4), 16) / 255;
+  const b = parseInt(h.slice(4, 6), 16) / 255;
+  return [r || 0, g || 0, b || 0, alpha];
+}
+
 // --- Altitude ----------------------------------------------------------
 
 /** Aircraft on the ground / with no altitude. */
@@ -71,6 +87,25 @@ export function altColor(altBaro: number | null, onGround: boolean): string {
   if (onGround || altBaro === null) return ALT_GROUND;
   for (const [ceiling, col] of ALT_BANDS) if (altBaro < ceiling) return col;
   return ALT_BANDS[ALT_BANDS.length - 1][1];
+}
+
+/** Ground / band colours darkened for legibility as *text* on a light
+ *  background (the map label chip, in light UI mode) — `altColor`'s palette
+ *  is tuned for icon fills (which get a contrasting halo outline regardless
+ *  of hue), so its pale green/yellow read poorly as plain text on light grey. */
+const ALT_GROUND_ON_LIGHT = "#6b7280";
+const ALT_BANDS_ON_LIGHT: readonly [number, string][] = [
+  [10000, "#2f8f3e"],
+  [20000, "#a6790a"],
+  [30000, "#c85a1f"],
+  [40000, "#c62839"],
+  [Infinity, "#8e1179"],
+];
+
+export function altColorOnLight(altBaro: number | null, onGround: boolean): string {
+  if (onGround || altBaro === null) return ALT_GROUND_ON_LIGHT;
+  for (const [ceiling, col] of ALT_BANDS_ON_LIGHT) if (altBaro < ceiling) return col;
+  return ALT_BANDS_ON_LIGHT[ALT_BANDS_ON_LIGHT.length - 1][1];
 }
 
 /** Continuous [altitude ft, colour] stops for the flight-trail line's

@@ -4,6 +4,7 @@ mod app;
 mod charts;
 mod commands;
 mod config;
+mod coverage;
 mod datalink;
 mod db;
 mod emergency_watch;
@@ -35,17 +36,18 @@ use crate::enrich::{
     photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
 use crate::airspace::Airspace;
+use crate::coverage::Coverage;
 use crate::charts::Charts;
 use crate::datalink::Datalink;
 use crate::emergency_watch::EmergencyWatch;
 use crate::geocode::Geocoder;
-use crate::ingest::{AircraftSource, HttpV2Source, LocalReceiverSource};
+use crate::ingest::{AircraftSource, HttpV2Source, LocalReceiverSource, RtlSdrSource};
 use crate::poller::{Poller, SourceStatus};
 use crate::state::LiveState;
 use crate::tiles::TileCache;
 use crate::weather::Weather;
 
-const USER_AGENT: &str = concat!(
+pub(crate) const USER_AGENT: &str = concat!(
     "RaccTrack-ADSB/",
     env!("CARGO_PKG_VERSION"),
     " (personal, non-commercial use)"
@@ -152,6 +154,7 @@ pub fn run() {
             let geocoder = Arc::new(Geocoder::new(db.clone(), http.clone()));
             let weather = Arc::new(Weather::new(db.clone(), http.clone()));
             let airspace = Arc::new(Airspace::new(db.clone(), http.clone()));
+            let coverage = Arc::new(Coverage::new(db.clone(), http.clone()));
             let charts = Arc::new(Charts::new(db.clone(), http.clone()));
             let datalink = Arc::new(Datalink::new(db.clone(), http.clone()));
             let tiles = Arc::new(TileCache::new(
@@ -164,7 +167,9 @@ pub fn run() {
             let viewport = Arc::new(Mutex::new(None));
             let status = Arc::new(Mutex::new(SourceStatus::default()));
 
+            let rtlsdr = Arc::new(RtlSdrSource::new(settings.clone()));
             let sources: Vec<Arc<dyn AircraftSource>> = vec![
+                rtlsdr.clone(),
                 Arc::new(LocalReceiverSource::new(http.clone(), settings.clone())),
                 Arc::new(HttpV2Source::adsb_lol(http.clone())),
                 Arc::new(HttpV2Source::adsb_fi(http.clone())),
@@ -173,6 +178,7 @@ pub fn run() {
             app.manage(AppState {
                 live: live.clone(),
                 sources: sources.clone(),
+                rtlsdr: rtlsdr.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
                 history: history.clone(),
@@ -181,6 +187,7 @@ pub fn run() {
                 geocoder: geocoder.clone(),
                 weather: weather.clone(),
                 airspace: airspace.clone(),
+                coverage: coverage.clone(),
                 charts: charts.clone(),
                 datalink: datalink.clone(),
                 airports: airports.clone(),
@@ -222,6 +229,10 @@ pub fn run() {
             commands::logbook_count,
             commands::export_logbook,
             commands::test_local_receiver,
+            commands::list_rtlsdr_devices,
+            commands::rtlsdr_status,
+            commands::fix_usb_driver,
+            commands::compute_coverage,
             commands::get_source_status,
             commands::log_frontend,
             commands::geocode,

@@ -3,7 +3,7 @@
   import Icon from "../ui/Icon.svelte";
   import { geocode, updateSettings } from "../api/backend";
   import { humanizeError } from "../ui/errors";
-  import { places, selectedHex, flyTo } from "../state";
+  import { places, selectedHex, flyTo, geofenceDraft } from "../state";
   import type { GeoResult, Place } from "../api/types";
 
   export let onClose: () => void;
@@ -64,7 +64,8 @@
       kind: r.kind,
       bbox: r.bbox,
       primary: $places.length === 0,
-      alert: { enabled: false, radiusNm: 10, ceilingFt: null, notableOnly: false },
+      alert: { enabled: false, radiusNm: 10, ceilingFt: null, notableOnly: false, shape: null },
+      rtlsdrLocation: false,
     };
     void save([...$places, p]);
     results = [];
@@ -78,12 +79,25 @@
   function setPrimary(id: string) {
     void save($places.map((p) => ({ ...p, primary: p.id === id })));
   }
+  function setRtlsdrLocation(id: string, on: boolean) {
+    // At most one — same "exactly one owner" pattern as primary.
+    void save(
+      $places.map((p) => ({ ...p, rtlsdrLocation: on && p.id === id })),
+    );
+  }
   function remove(id: string) {
     void save($places.filter((p) => p.id !== id));
   }
   function toggleAlert(id: string, on: boolean) {
     void patch(id, (p) => ({ ...p, alert: { ...p.alert, enabled: on } }));
     if (on) expanded = id;
+  }
+  function startDraw(id: string) {
+    geofenceDraft.set({ placeId: id });
+    onClose(); // clear the map so the whole window is available to click in
+  }
+  function clearShape(id: string) {
+    void patch(id, (p) => ({ ...p, alert: { ...p.alert, shape: null } }));
   }
   const num = (v: string, fallback: number) => {
     const n = parseFloat(v);
@@ -172,6 +186,14 @@
               />
               alert
             </label>
+            <label class="al" title="This is where the RTL-SDR antenna sits">
+              <input
+                type="checkbox"
+                checked={p.rtlsdrLocation}
+                on:change={(e) => setRtlsdrLocation(p.id, e.currentTarget.checked)}
+              />
+              RTL-SDR
+            </label>
             <button
               class="rm"
               title="Remove"
@@ -185,21 +207,34 @@
 
           {#if p.alert.enabled && expanded === p.id}
             <div class="cfg">
-              <label>
-                Within
-                <input
-                  type="number"
-                  min="0.5"
-                  max="250"
-                  step="0.5"
-                  value={p.alert.radiusNm}
-                  on:change={(e) =>
-                    patch(p.id, (x) => ({
-                      ...x,
-                      alert: { ...x.alert, radiusNm: num(e.currentTarget.value, 10) },
-                    }))}
-                /> nm
-              </label>
+              {#if p.alert.shape && p.alert.shape.length >= 3}
+                <span class="shape-info">Custom shape · {p.alert.shape.length} pts</span>
+                <button type="button" class="mini" on:click={() => startDraw(p.id)}
+                  >Redraw</button
+                >
+                <button type="button" class="mini" on:click={() => clearShape(p.id)}
+                  >Use radius instead</button
+                >
+              {:else}
+                <label>
+                  Within
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="250"
+                    step="0.5"
+                    value={p.alert.radiusNm}
+                    on:change={(e) =>
+                      patch(p.id, (x) => ({
+                        ...x,
+                        alert: { ...x.alert, radiusNm: num(e.currentTarget.value, 10) },
+                      }))}
+                  /> nm
+                </label>
+                <button type="button" class="mini" on:click={() => startDraw(p.id)}
+                  >Draw custom shape</button
+                >
+              {/if}
               <label>
                 Below
                 <input
@@ -234,7 +269,9 @@
             </div>
           {:else if p.alert.enabled}
             <button class="cfg-open" on:click={() => (expanded = p.id)}>
-              within {p.alert.radiusNm} nm{p.alert.ceilingFt
+              {p.alert.shape && p.alert.shape.length >= 3
+                ? `custom shape · ${p.alert.shape.length} pts`
+                : `within ${p.alert.radiusNm} nm`}{p.alert.ceilingFt
                 ? ` · below ${p.alert.ceilingFt.toLocaleString()} ft`
                 : ""}{p.alert.notableOnly ? " · notable only" : ""}
             </button>
@@ -402,6 +439,18 @@
   }
   .cfg input[type="number"] {
     width: 58px;
+  }
+  .shape-info {
+    flex-basis: 100%;
+    color: var(--text-dim);
+  }
+  .cfg button.mini {
+    font-size: 10px;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-elev);
+    color: var(--text);
   }
   .cfg-open {
     display: block;

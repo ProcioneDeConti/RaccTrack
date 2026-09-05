@@ -52,6 +52,13 @@
   }
   onDestroy(endDrag);
 
+  // --- zoom ---
+  function onWheel(e: WheelEvent) {
+    e.preventDefault();
+    const factor = Math.exp(e.deltaY * 0.001);
+    horizonRangeNm.update((r) => Math.min(120, Math.max(2, r * factor)));
+  }
+
   function pick(hex: string) {
     if (drag && drag.moved > 4) return;
     selectedHex.set(hex);
@@ -153,6 +160,7 @@
         class="stagesvg"
         viewBox="0 0 {width} {RIBBON_H + PAD + WIN_H + PAD}"
         on:pointerdown={startDrag}
+        on:wheel={onWheel}
         role="presentation"
       >
         <!-- compass ribbon: a scrolling arc (RIBBON_ARC wide) centred on the view -->
@@ -311,7 +319,7 @@
       </svg>
 
       <div class="foot">
-        <span>{$horizonTargets.length} in range · drag to look around</span>
+        <span>{$horizonTargets.length} in range · drag to look around · scroll to zoom</span>
         <span class="cdir">{compass(center)} {Math.round(center)}°</span>
       </div>
     {/if}

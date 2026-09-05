@@ -18,9 +18,14 @@
     resolveStyleUrl,
     themeFor,
   } from "./style";
-  import { registerAircraftIcons } from "./icons";
+  import {
+    registerAircraftIcons,
+    registerChipIcon,
+    registerRtlsdrBadge,
+    CHIP_PILL_ID,
+    RTLSDR_BADGE_ID,
+  } from "./icons";
   import Icon from "../ui/Icon.svelte";
-  import RaccoonMark from "../ui/RaccoonMark.svelte";
   import { addCoverageBoundary } from "./coverage";
   import { latestRadar } from "./radar";
   import { makeTransformRequest } from "./tileProxy";
@@ -34,6 +39,10 @@
     places,
     primaryPlace,
     goHomeSignal,
+    mapColors,
+    geofenceDraft,
+    coverageEnabled,
+    coverageResult,
     layers,
     rangeRingsNm,
     selectedAirport,
@@ -43,7 +52,7 @@
     routeLine,
   } from "../state";
   import { setViewport, getTrail, getSettings, updateSettings } from "../api/backend";
-  import type { TrailPoint, MapLayers, Place } from "../api/types";
+  import type { TrailPoint, MapLayers, MapColors, Place } from "../api/types";
   import { copyText } from "../ui/clipboard";
   import { get } from "svelte/store";
   import { ACCENT, EMERGENCY, ALT_GRADIENT } from "../theme/colors";
@@ -71,6 +80,13 @@
   let unsubSel: (() => void) | undefined;
   let unsubBasemap: (() => void) | undefined;
   let unsubPlaces: (() => void) | undefined;
+  let unsubColors: (() => void) | undefined;
+  let unsubDraft: (() => void) | undefined;
+  let unsubCoverageEnabled: (() => void) | undefined;
+  let unsubCoverageResult: (() => void) | undefined;
+  /** Non-null while hand-drawing a geofence; mirrors `geofenceDraft`. */
+  let draftActive: { placeId: string } | null = null;
+  let draftPoints: [number, number][] = [];
   let unsubGoHome: (() => void) | undefined;
   let placeMarkers = new Map<string, maplibregl.Marker>();
   let activeBasemap = "";
@@ -244,6 +260,29 @@
     return ["Open Sans Regular", "Noto Sans Regular"];
   }
 
+  /** The info-chip's two-line text-field — altitude's color property flips
+   *  between the icon-fill palette (dark chip bg) and a darkened variant
+   *  legible as plain text on a light chip bg (see `altColorOnLight`). Needs
+   *  rebuilding (not just a paint-property tweak) since the color choice is
+   *  baked into this layout expression. */
+  function chipTextField(dark: boolean): any {
+    const altColorProp = dark ? "color" : "altTextColorOnLight";
+    return [
+      "case",
+      ["==", ["get", "altLabel"], ""],
+      ["format", ["get", "callsign"], {}],
+      [
+        "format",
+        ["get", "callsign"],
+        {},
+        "\n",
+        {},
+        ["get", "altLabel"],
+        { "text-color": ["get", altColorProp] },
+      ],
+    ];
+  }
+
   // (Re)create the app's sources / layers / images. Idempotent — safe to call
   // on `load`, `style.load` and `styledata`, and again after a basemap swap
   // wipes everything the app added.
@@ -264,12 +303,16 @@
       map.getLayer("ov-airport-dot") &&
       map.getLayer("coverage-bounds-line") &&
       map.hasImage("ac-jet") &&
+      map.hasImage(CHIP_PILL_ID) &&
+      map.hasImage(RTLSDR_BADGE_ID) &&
       themeApplied === activeBasemap
     ) {
       return;
     }
 
     registerAircraftIcons(map);
+    registerChipIcon(map);
+    registerRtlsdrBadge(map);
 
     if (!map.getSource("aircraft")) {
       map.addSource("aircraft", {
@@ -304,6 +347,11 @@
 
     const dark = themeFor(activeBasemap).dark;
     const lab = dark ? LABEL.dark : LABEL.light;
+    // Chip fill/border — a step lighter than the near-black/white halo colors
+    // above, matching the app's own "elevated surface" panel tokens
+    // (--bg-elev / --border in app.css; map layers can't read CSS vars).
+    const chipBg = dark ? "#1c232d" : "#e9edf1";
+    const chipBorder = dark ? "#39424e" : "#c3cad3";
     const iconSize: any = [
       "interpolate",
       ["linear"],
@@ -313,6 +361,9 @@
       8,
       ["*", 1.15, ["get", "sizeMul"]],
     ];
+    // Higher aircraft paint (and win label collisions) over lower ones —
+    // grounded/unknown-altitude aircraft (null) sort to the very back.
+    const altitudeSortKey: any = ["coalesce", ["get", "altBaro"], -1];
 
     if (!map.getLayer("route-remain")) {
       map.addLayer({
@@ -422,6 +473,78 @@
       });
     }
 
+    // Callsign + altitude render together in one solid-background "chip" to
+    // the right of the plane, callsign on top and altitude on its own line
+    // below: a fixed-size pill icon with its text centered on top, both
+    // offset from the plane's anchor by the same amount (in their own units —
+    // icon-offset is raw px, text-offset is ems of the layer's text-size) so
+    // the two sit exactly on top of each other, clear of the icon.
+    // Collision-managed (not allow-overlap) so two overlapping chips don't
+    // paint over each other unreadably — `symbol-sort-key` (altitude) makes
+    // the winner deterministic per pair (the higher aircraft's chip wins,
+    // matching the plane icons' own stacking), which is also what fixed an
+    // earlier flicker bug: with no stable sort key, collision outcomes for
+    // borderline-overlapping chips could flip between successive ~3s poll
+    // refreshes as aircraft nudged position; a stable key makes the same
+    // pair resolve the same way every time. Altitude is colored to match the
+    // aircraft's own altitude-band tint via a `format` expression
+    // section-color override; callsign uses the plain theme text color.
+    // Plane icons here render up to ~35px in radius (a zoomed-in heavy
+    // aircraft) — the offset to the right clears that with room to spare.
+    if (!map.getLayer("aircraft-info-chip")) {
+      map.addLayer({
+        id: "aircraft-info-chip",
+        type: "symbol",
+        source: "aircraft",
+        minzoom: 6,
+        layout: {
+          "icon-image": CHIP_PILL_ID,
+          "icon-offset": [36, 0],
+          "symbol-sort-key": altitudeSortKey,
+          "text-field": chipTextField(dark),
+          "text-font": styleFont(),
+          "text-size": 10,
+          "text-offset": [3.6, 0],
+          "text-anchor": "center",
+        },
+        paint: {
+          "icon-color": chipBg,
+          "icon-halo-color": chipBorder,
+          "icon-halo-width": 2.2,
+          "text-color": lab.text,
+        },
+      });
+    }
+
+    // Small WiFi-style badge at the chip's top-right corner marking an
+    // aircraft heard straight off the user's own RTL-SDR dongle. A separate
+    // solo icon layer (no text, no compositing with the pill) rather than
+    // trying to bake it into the chip itself — after two rounds of grief
+    // getting the chip's own icon+text combo right, adding a second
+    // independent element to that same layer wasn't worth the risk when a
+    // lone icon (exactly how the plane icons already work) is this simple.
+    if (!map.getLayer("aircraft-direct-badge")) {
+      map.addLayer({
+        id: "aircraft-direct-badge",
+        type: "symbol",
+        source: "aircraft",
+        minzoom: 6,
+        filter: ["==", ["get", "direct"], true],
+        layout: {
+          "icon-image": RTLSDR_BADGE_ID,
+          "icon-size": 0.34,
+          "icon-offset": [74, -20],
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+        paint: {
+          "icon-color": ACCENT,
+          "icon-halo-color": chipBg,
+          "icon-halo-width": 1.4,
+        },
+      });
+    }
+
     const freshInstall = !map.getLayer("aircraft-symbol");
     if (freshInstall) {
       map.addLayer({
@@ -435,12 +558,7 @@
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
-          "text-field": ["step", ["zoom"], "", 6, ["get", "callsign"]],
-          "text-font": styleFont(),
-          "text-size": 10,
-          "text-offset": [0, 1.5],
-          "text-anchor": "top",
-          "text-optional": true,
+          "symbol-sort-key": altitudeSortKey,
         },
         paint: {
           "icon-color": ["get", "color"],
@@ -449,19 +567,21 @@
           "icon-halo-color": lab.outline,
           "icon-halo-width": 1.55,
           "icon-halo-blur": 0.4,
-          "text-color": lab.text,
-          "text-halo-color": lab.halo,
-          "text-halo-width": 1.6,
         },
       });
     }
 
-    // Re-apply theme-dependent colors (the layer persists across style swaps).
+    // Re-apply theme-dependent colors (the layers persist across style swaps).
     if (map.getLayer("aircraft-symbol") && themeApplied !== activeBasemap) {
       themeApplied = activeBasemap;
       map.setPaintProperty("aircraft-symbol", "icon-halo-color", lab.outline);
-      map.setPaintProperty("aircraft-symbol", "text-color", lab.text);
-      map.setPaintProperty("aircraft-symbol", "text-halo-color", lab.halo);
+      map.setPaintProperty("aircraft-info-chip", "icon-color", chipBg);
+      map.setPaintProperty("aircraft-info-chip", "icon-halo-color", chipBorder);
+      map.setPaintProperty("aircraft-info-chip", "text-color", lab.text);
+      map.setPaintProperty("aircraft-direct-badge", "icon-halo-color", chipBg);
+      // The altitude line's color is baked into the text-field expression
+      // (a `format` section override), not a paint property — rebuild it.
+      map.setLayoutProperty("aircraft-info-chip", "text-field", chipTextField(dark));
       // Overlay labels (airports, range rings) flip with the basemap too.
       for (const id of ["ov-airport-label", "ov-rings-label"]) {
         if (!map.getLayer(id)) continue;
@@ -525,11 +645,21 @@
       }
     });
     map.on("click", (e) => {
+      if (draftActive) {
+        draftPoints = [...draftPoints, [e.lngLat.lat, e.lngLat.lng]];
+        overlays?.setDraft(draftPoints);
+        return;
+      }
       closeCtx();
       const hits = map!.queryRenderedFeatures(e.point, {
         layers: ["aircraft-symbol"],
       });
       if (hits.length === 0) selectedHex.set(null);
+    });
+    map.on("dblclick", (e) => {
+      if (!draftActive) return;
+      e.preventDefault();
+      if (draftPoints.length >= 3) void finishDraft();
     });
 
     map.on("contextmenu", (e) => {
@@ -575,7 +705,8 @@
       kind: "coordinates",
       bbox: null,
       primary: cur.length === 0,
-      alert: { enabled: false, radiusNm: 10, ceilingFt: null, notableOnly: false },
+      alert: { enabled: false, radiusNm: 10, ceilingFt: null, notableOnly: false, shape: null },
+      rtlsdrLocation: false,
     };
     const next = [...cur, p];
     try {
@@ -587,15 +718,35 @@
     }
   }
 
+  async function finishDraft() {
+    if (!draftActive || draftPoints.length < 3) return;
+    const { placeId } = draftActive;
+    const shape = draftPoints;
+    const cur = get(places);
+    const next = cur.map((p) =>
+      p.id === placeId ? { ...p, alert: { ...p.alert, shape } } : p,
+    );
+    geofenceDraft.set(null);
+    try {
+      const s = await updateSettings({ places: next });
+      places.set(s.places ?? next);
+      flashToast("Geofence saved");
+    } catch {
+      flashToast("Couldn't save the geofence shape");
+    }
+  }
+
   onMount(async () => {
     let cacheEnabled = false;
     let basemapKey = "darkMatter";
     let initialPlaces: Place[] = [];
+    let initialColors: MapColors = { airspace: {}, geofenceFill: null, geofenceLine: null };
     try {
       const s = await getSettings();
       cacheEnabled = s.tileCacheEnabled;
       basemapKey = s.basemap;
       initialPlaces = s.places ?? [];
+      initialColors = s.colors ?? initialColors;
       if (s.layers) layers.set(s.layers);
       if (s.rangeRingsNm?.length) rangeRingsNm.set(s.rangeRingsNm);
     } catch {
@@ -683,6 +834,8 @@
         curLayers.rangeRings,
       );
       overlays?.setPlaceRings(get(places));
+      overlays?.setColors(get(mapColors));
+      overlays?.setCoverage(get(coverageEnabled) ? get(coverageResult) : null);
       syncSelected();
       pushViewport();
       refreshOverlays();
@@ -774,6 +927,22 @@
       const p = get(primaryPlace);
       if (n > 0 && p) recenterHome(p, true);
     });
+
+    mapColors.set(initialColors);
+    unsubColors = mapColors.subscribe((c) => overlays?.setColors(c));
+
+    unsubDraft = geofenceDraft.subscribe((d) => {
+      draftActive = d;
+      draftPoints = [];
+      overlays?.setDraft([]);
+      if (map) map.getCanvas().style.cursor = d ? "crosshair" : "";
+    });
+
+    const applyCoverage = () => {
+      overlays?.setCoverage(get(coverageEnabled) ? get(coverageResult) : null);
+    };
+    unsubCoverageEnabled = coverageEnabled.subscribe(applyCoverage);
+    unsubCoverageResult = coverageResult.subscribe(applyCoverage);
   });
 
   function placePinSvg(primary: boolean): string {
@@ -878,6 +1047,10 @@
     unsubSel?.();
     unsubBasemap?.();
     unsubPlaces?.();
+    unsubColors?.();
+    unsubDraft?.();
+    unsubCoverageEnabled?.();
+    unsubCoverageResult?.();
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();
@@ -908,7 +1081,11 @@
 </script>
 
 <svelte:window
-  on:keydown={(e) => e.key === "Escape" && closeCtx()}
+  on:keydown={(e) => {
+    if (e.key !== "Escape") return;
+    if (draftActive) geofenceDraft.set(null);
+    else closeCtx();
+  }}
   on:click={() => ctxMenu && closeCtx()}
   on:blur={closeCtx}
 />
@@ -940,7 +1117,7 @@
 
 {#if !mapError && $aircraftGeoJson.features.length === 0}
   <div class="empty-mark">
-    <RaccoonMark size={96} />
+    <Icon name="x" size={72} stroke={1.5} />
     <p>No aircraft in view — pan the map or wait for the next sweep.</p>
   </div>
 {/if}
@@ -953,6 +1130,18 @@
 {/if}
 {#if mapError}
   <div class="map-error" title={mapError}>Basemap error: {mapError}</div>
+{/if}
+
+{#if draftActive}
+  <div class="draft-chip">
+    <Icon name="crosshair" size={13} />
+    <span
+      >Click to add points ({draftPoints.length}) · double-click or Finish to
+      save</span
+    >
+    <button disabled={draftPoints.length < 3} on:click={finishDraft}>Finish</button>
+    <button class="ghost" on:click={() => geofenceDraft.set(null)}>Cancel</button>
+  </div>
 {/if}
 
 <style>
@@ -974,8 +1163,9 @@
     color: var(--text-dim);
     text-align: center;
   }
-  .empty-mark :global(.rm) {
-    opacity: 0.9;
+  .empty-mark :global(.icon) {
+    color: var(--emergency);
+    opacity: 0.45;
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
   }
   .empty-mark p {
@@ -1021,6 +1211,40 @@
     font-size: var(--fs-md);
     font-weight: 600;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+  .draft-chip {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 5px 8px 5px 10px;
+    font-size: var(--fs-sm);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+  .draft-chip button {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 4px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+  }
+  .draft-chip button:disabled {
+    opacity: 0.4;
+  }
+  .draft-chip button.ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
   }
   .ctx-menu {
     position: absolute;

@@ -100,8 +100,8 @@
     </div>
   {:else if prog}
     <p class="note">
-      {fmtDistanceNm(prog.total)} great-circle{#if prog.stale} · aircraft isn't on this
-        route{/if}
+      {fmtDistanceNm(prog.total)} direct distance{#if prog.stale} · aircraft isn't on
+        this route{/if}
     </p>
   {/if}
 

@@ -20,7 +20,7 @@
 <footer class="statusbar">
   <span class="src" class:bad={$sourceStatus && !$sourceStatus.healthy}>
     <span class="dot"></span>
-    {$sourceStatus?.activeSource ?? "connecting…"}
+    {$sourceStatus?.activeSources?.length ? $sourceStatus.activeSources.join(" + ") : "connecting…"}
     {#if $sourceStatus && !$sourceStatus.healthy}(degraded){/if}
   </span>
   <span>{$shownCount} shown / {$total} in feed</span>

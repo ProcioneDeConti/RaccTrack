@@ -120,7 +120,25 @@ non-commercial use.
 photos — set one in **Settings → Aircraft photos**. Left blank, the app shows
 representative model photos from Wikipedia instead.
 
+## Versioning
+
+[Semantic Versioning](https://semver.org/); see [`CHANGELOG.md`](./CHANGELOG.md)
+for what changed in each release. `package.json` is the source of truth for
+the version number — `tauri.conf.json` reads it directly, and
+`src-tauri/Cargo.toml` is kept in sync automatically by `npm version`.
+
+To cut a release: `npm version patch|minor|major`. This bumps `package.json`,
+syncs `Cargo.toml`/`Cargo.lock` via `scripts/sync-cargo-version.mjs`, and (by
+npm's default behavior) creates a commit and a matching `vX.Y.Z` git tag.
+
 ## License
 
 [Apache License 2.0](./LICENSE). Third-party data and service attributions are in
 [`NOTICE`](./NOTICE).
+
+## Disclaimer
+
+RaccTrack is informational/entertainment only — not for real-world
+navigation, ATC, or aircraft separation, and data accuracy from community
+ADS-B feeds isn't guaranteed. See [`DISCLAIMER.md`](./DISCLAIMER.md) for the
+full safety and liability disclaimer (shown in-app on first launch).

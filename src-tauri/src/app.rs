@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use arc_swap::ArcSwap;
 
 use crate::airspace::Airspace;
+use crate::coverage::Coverage;
 use crate::alerts::Alerts;
 use crate::charts::Charts;
 use crate::config::AppSettings;
@@ -16,7 +17,7 @@ use crate::enrich::airports::Airports;
 use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
 use crate::history::History;
-use crate::ingest::AircraftSource;
+use crate::ingest::{AircraftSource, RtlSdrSource};
 use crate::logbook::Logbook;
 use crate::poller::SourceStatus;
 use crate::region::Area;
@@ -29,6 +30,11 @@ pub struct AppState {
     /// Ingestion sources, shared with the poller — also used for on-demand
     /// single-aircraft (`by_hex`) lookups from the detail command.
     pub sources: Vec<Arc<dyn AircraftSource>>,
+    /// Same instance as the `RtlSdrSource` entry in `sources`, kept as its
+    /// concrete type too so the Settings status command can reach its
+    /// `status()` (not part of the trait — every other source is a plain
+    /// request/response HTTP fetch with nothing analogous to report).
+    pub rtlsdr: Arc<RtlSdrSource>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,
@@ -37,6 +43,7 @@ pub struct AppState {
     pub geocoder: Arc<Geocoder>,
     pub weather: Arc<Weather>,
     pub airspace: Arc<Airspace>,
+    pub coverage: Arc<Coverage>,
     pub charts: Arc<Charts>,
     pub datalink: Arc<Datalink>,
     pub airports: Arc<ArcSwap<Airports>>,

@@ -3,6 +3,7 @@
   import Icon from "../ui/Icon.svelte";
   import RaccoonMark from "../ui/RaccoonMark.svelte";
   import { openExternal } from "../api/backend";
+  import { disclaimerOpen } from "../state";
 
   export let onClose: () => void;
 
@@ -62,6 +63,10 @@
     <button class="row" on:click={() => open(`${repo}/blob/main/LICENSE`)}>
       <Icon name="external-link" size={13} />
       <span>Licensed Apache-2.0</span>
+    </button>
+    <button class="row" on:click={() => disclaimerOpen.set(true)}>
+      <Icon name="alert-triangle" size={13} />
+      <span>Safety &amp; data disclaimer</span>
     </button>
   </div>
 

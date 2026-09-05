@@ -1,6 +1,6 @@
 {
   "name": "racctrack-adsb",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "RaccTrack (ADS-B) — free, no-paywall ADS-B flight tracker for North America",
   "license": "Apache-2.0",
   "repository": {
@@ -14,12 +14,14 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version": "node scripts/sync-cargo-version.mjs && git add src-tauri/Cargo.toml src-tauri/Cargo.lock"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-notification": "^2.2.0",
     "@tauri-apps/plugin-os": "^2.2.0",
+    "earcut": "^3.2.3",
     "maplibre-gl": "^4.7.1"
   },
   "devDependencies": {

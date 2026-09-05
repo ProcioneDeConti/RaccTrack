@@ -1,9 +1,14 @@
 <script lang="ts">
-  import { layers, primaryPlace } from "../state";
+  import { layers, primaryPlace, mapColors } from "../state";
   import { updateSettings } from "../api/backend";
-  import type { MapLayers } from "../api/types";
+  import type { MapColors, MapLayers } from "../api/types";
   import Panel from "../ui/Panel.svelte";
-  import { AIRSPACE_STYLE, FLIGHT_CATEGORY_COLORS } from "../theme/colors";
+  import {
+    AIRSPACE_STYLE,
+    FLIGHT_CATEGORY_COLORS,
+    GEOFENCE_LINE_DEFAULT,
+    GEOFENCE_FILL_DEFAULT,
+  } from "../theme/colors";
 
   export let onClose: () => void;
 
@@ -16,6 +21,19 @@
   }
 
   $: l = $layers;
+
+  async function saveColors(next: MapColors) {
+    const s = await updateSettings({ colors: next });
+    mapColors.set(s.colors);
+  }
+  function setAirspaceColor(keys: string[], hex: string) {
+    const airspace = { ...$mapColors.airspace };
+    for (const k of keys) airspace[k] = hex;
+    void saveColors({ ...$mapColors, airspace });
+  }
+  function resetColors() {
+    void saveColors({ airspace: {}, geofenceFill: null, geofenceLine: null });
+  }
 
   // `color` is pulled from the shared theme palette (src/lib/theme/colors.ts);
   // only the label/tooltip copy lives here.
@@ -50,49 +68,49 @@
     {
       abbr: "B",
       name: "Class B",
-      color: AIRSPACE_STYLE.CLASS_B.color,
+      keys: ["CLASS_B"],
       tip: "Class B — the busiest terminal airspace, around major airports (surface up to ~10,000 ft MSL). ATC clearance required to enter.",
     },
     {
       abbr: "C",
       name: "Class C",
-      color: AIRSPACE_STYLE.CLASS_C.color,
+      keys: ["CLASS_C"],
       tip: "Class C — moderately busy terminal airspace with an operating control tower and radar. Two-way radio contact required before entry.",
     },
     {
       abbr: "D",
       name: "Class D",
-      color: AIRSPACE_STYLE.CLASS_D.color,
+      keys: ["CLASS_D"],
       tip: "Class D — airspace around an airport with an operating control tower (typically to ~2,500 ft AGL). Two-way radio contact required.",
     },
     {
       abbr: "E",
       name: "Class E",
-      color: AIRSPACE_STYLE.CLASS_E.color,
+      keys: ["CLASS_E"],
       tip: "Class E — controlled airspace that isn't A/B/C/D. No entry requirements for VFR flight; IFR needs a clearance.",
     },
     {
       abbr: "Mode C",
       name: "veil",
-      color: AIRSPACE_STYLE.MODE_C.color,
+      keys: ["MODE_C"],
       tip: "Mode C veil — 30 nm ring around a Class B airport within which a transponder with altitude reporting is required.",
     },
     {
       abbr: "MOA",
       name: "Military ops",
-      color: AIRSPACE_STYLE.MOA.color,
+      keys: ["MOA"],
       tip: "Military Operations Area — military training activity. VFR traffic is permitted; exercise extreme caution when active.",
     },
     {
       abbr: "R / P / W",
       name: "Restricted etc.",
-      color: AIRSPACE_STYLE.RESTRICTED.color,
+      keys: ["RESTRICTED", "PROHIBITED", "WARNING"],
       tip: "Restricted, Prohibited, and Warning areas — hazards to aircraft (weapons, airspace security). Entry is restricted, forbidden, or advised against.",
     },
     {
       abbr: "A",
       name: "Alert",
-      color: AIRSPACE_STYLE.ALERT.color,
+      keys: ["ALERT"],
       tip: "Alert Area — high volume of pilot training or unusual aerial activity. Not regulatory; all traffic shares responsibility for collision avoidance.",
     },
   ];
@@ -125,15 +143,44 @@
   {/if}
   {#if l.airspace}
     <div class="legend">
-      <div class="lh u-eyebrow">Airspace (hover for detail)</div>
+      <div class="lh u-eyebrow">Airspace (hover for detail, click swatch to recolor)</div>
       {#each AS_LEGEND as x}
         <div class="lrow" title={x.tip}>
-          <span class="sw" style="background:{x.color}"></span>
+          <input
+            type="color"
+            class="sw"
+            value={$mapColors.airspace[x.keys[0]] ?? AIRSPACE_STYLE[x.keys[0]].color}
+            on:input={(e) => setAirspaceColor(x.keys, e.currentTarget.value)}
+          />
           <b>{x.abbr}</b><span class="ex">{x.name}</span>
         </div>
       {/each}
     </div>
   {/if}
+
+  <div class="legend">
+    <div class="lh u-eyebrow">Geofence (place alerts)</div>
+    <div class="lrow">
+      <input
+        type="color"
+        class="sw"
+        value={$mapColors.geofenceLine ?? GEOFENCE_LINE_DEFAULT}
+        on:input={(e) => saveColors({ ...$mapColors, geofenceLine: e.currentTarget.value })}
+      />
+      <span class="ex">Outline</span>
+    </div>
+    <div class="lrow">
+      <input
+        type="color"
+        class="sw"
+        value={$mapColors.geofenceFill ?? GEOFENCE_FILL_DEFAULT}
+        on:input={(e) => saveColors({ ...$mapColors, geofenceFill: e.currentTarget.value })}
+      />
+      <span class="ex">Fill</span>
+    </div>
+  </div>
+
+  <button type="button" class="reset-colors" on:click={resetColors}>Reset colors to default</button>
 </Panel>
 
 <style>
@@ -172,11 +219,34 @@
   .lrow .ex {
     color: var(--text-dim);
   }
-  .sw {
-    width: 9px;
-    height: 9px;
+  input.sw {
+    width: 14px;
+    height: 14px;
     border-radius: 2px;
     display: inline-block;
     flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  input.sw::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  input.sw::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
+  }
+  .reset-colors {
+    margin-top: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 10px;
+    text-decoration: underline;
+    padding: 0;
+  }
+  .reset-colors:hover {
+    color: var(--text);
   }
 </style>

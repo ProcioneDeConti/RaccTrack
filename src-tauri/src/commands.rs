@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::alerts::{WatchEntry, WatchKind};
 use crate::app::AppState;
@@ -117,6 +117,113 @@ pub async fn test_local_receiver(url: String) -> CmdResult<LocalReceiverProbe> {
         aircraft: body.ac.len(),
         with_position,
     })
+}
+
+/// Enumerate connected RTL-SDR dongles, for the Settings "detect device"
+/// button — a plain probe, independent of whether direct RTL-SDR mode is on.
+#[tauri::command]
+pub fn list_rtlsdr_devices() -> CmdResult<Vec<String>> {
+    crate::ingest::rtlsdr::list_devices().map_err(err)
+}
+
+/// Compute (or return the cached) estimated RTL-SDR reception polygon
+/// around whichever saved place has `rtlsdrLocation` set. Errors if none is
+/// set — the frontend should only call this once one is.
+#[tauri::command]
+pub async fn compute_coverage(
+    state: State<'_, AppState>,
+) -> CmdResult<crate::coverage::CoverageResult> {
+    let (place, antenna_height_ft, target_alt_ft) = {
+        let s = state.settings.lock();
+        let place = s
+            .places
+            .iter()
+            .find(|p| p.rtlsdr_location)
+            .cloned()
+            .ok_or_else(|| {
+                "No place is marked as the RTL-SDR location — set one in Places & alerts.".to_string()
+            })?;
+        (place, s.coverage_antenna_height_ft, s.coverage_target_alt_ft)
+    };
+    state
+        .coverage
+        .compute(place.lat, place.lon, antenna_height_ft, target_alt_ft)
+        .await
+        .map_err(err)
+}
+
+/// Live progress of the direct-RTL-SDR worker thread — device open? real
+/// messages decoded yet? — so Settings can show more than "no error so far".
+#[tauri::command]
+pub fn rtlsdr_status(state: State<AppState>) -> crate::ingest::rtlsdr::RtlSdrStatus {
+    state.rtlsdr.status()
+}
+
+#[derive(serde::Deserialize)]
+struct GithubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(serde::Deserialize)]
+struct GithubRelease {
+    assets: Vec<GithubAsset>,
+}
+
+/// Download the latest official Zadig release and launch it (elevated), for
+/// Settings' "Fix USB driver" button — RTL-SDR dongles need WinUSB bound via
+/// Zadig before `rs_rtl` can claim them. Windows-only; driver installation
+/// on Windows can't go through a plain spawn, it needs ShellExecute's
+/// "runas" verb (that's what `runas` does), which is why this can't just be
+/// `open_external`ed. Zadig itself is a separate downloaded binary we launch
+/// as its own process — not linked into this app — so its GPL-3.0 license
+/// doesn't affect RaccTrack's.
+#[tauri::command]
+pub async fn fix_usb_driver(app: AppHandle) -> CmdResult<()> {
+    if !cfg!(target_os = "windows") {
+        return Err("USB driver installation is only needed on Windows.".into());
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent(crate::USER_AGENT)
+        .build()
+        .map_err(err)?;
+
+    let release: GithubRelease = client
+        .get("https://api.github.com/repos/pbatard/libwdi/releases/latest")
+        .send()
+        .await
+        .map_err(err)?
+        .json()
+        .await
+        .map_err(err)?;
+
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| a.name.starts_with("zadig-") && a.name.ends_with(".exe"))
+        .ok_or_else(|| "couldn't find a Zadig download in the latest release".to_string())?;
+
+    let bytes = client
+        .get(&asset.browser_download_url)
+        .send()
+        .await
+        .map_err(err)?
+        .bytes()
+        .await
+        .map_err(err)?;
+
+    let dir = app.path().app_data_dir().map_err(err)?;
+    std::fs::create_dir_all(&dir).map_err(err)?;
+    let exe_path = dir.join("zadig.exe");
+    std::fs::write(&exe_path, &bytes).map_err(err)?;
+
+    tokio::task::spawn_blocking(move || runas::Command::new(&exe_path).status())
+        .await
+        .map_err(err)?
+        .map_err(err)?;
+
+    Ok(())
 }
 
 // --- flight-event history ---

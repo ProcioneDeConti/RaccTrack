@@ -14,6 +14,7 @@ use crate::alerts::Alerts;
 use crate::config::AppSettings;
 use crate::enrich::Enricher;
 use crate::history::History;
+use crate::ingest::model::Aircraft;
 use crate::ingest::{normalize, queries_for_area, AircraftSource};
 use crate::region::Area;
 use crate::state::{AircraftEvent, EventKind, LiveState};
@@ -22,7 +23,10 @@ use crate::util::now_ms;
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceStatus {
-    pub active_source: String,
+    /// Every source that actually contributed aircraft this poll — can be
+    /// more than one now (e.g. a direct RTL-SDR feed *and* adsb.fi merged
+    /// together), not just whichever one "won".
+    pub active_sources: Vec<String>,
     pub healthy: bool,
     pub last_error: Option<String>,
     pub last_success_at: Option<i64>,
@@ -32,7 +36,7 @@ pub struct SourceStatus {
 impl Default for SourceStatus {
     fn default() -> Self {
         Self {
-            active_source: "starting…".into(),
+            active_sources: Vec::new(),
             healthy: false,
             last_error: None,
             last_success_at: None,
@@ -86,33 +90,65 @@ impl Poller {
         }
     }
 
-    /// Order sources per the user's `source_order` preference. A local receiver,
-    /// when enabled, is always tried first (and dropped entirely when disabled).
+    /// Order sources per the user's `source_order` preference. A direct
+    /// RTL-SDR dongle, when enabled, outranks even the local-receiver feed
+    /// (both are dropped entirely when their toggle is off). The community
+    /// aggregators are dropped entirely too when `online_sources_enabled`
+    /// is off, regardless of `source_order` — a hard "local only" mode.
+    ///
+    /// This ranking is also the merge priority: `poll_once` always queries
+    /// every "locally owned" source (RTL-SDR, local receiver — no rate
+    /// limit, no reason to skip either), then walks the remaining community
+    /// sources as a fallback chain (only one queried per poll — they're
+    /// redundant with each other, no benefit to hitting both). Results are
+    /// merged by hex, first (= highest-ranked) source wins per aircraft.
     fn ordered_sources(&self) -> Vec<Arc<dyn AircraftSource>> {
-        let (order, local_on) = {
+        let (order, local_on, rtlsdr_on, online_on) = {
             let s = self.settings.lock();
-            (s.source_order.clone(), s.local_receiver_enabled)
+            (
+                s.source_order.clone(),
+                s.local_receiver_enabled,
+                s.rtlsdr_enabled,
+                s.online_sources_enabled,
+            )
         };
         let is_local = |s: &Arc<dyn AircraftSource>| {
             s.name() == crate::ingest::local::NAME
         };
+        let is_rtlsdr = |s: &Arc<dyn AircraftSource>| {
+            s.name() == crate::ingest::rtlsdr::NAME
+        };
         let mut ranked: Vec<_> = self
             .sources
             .iter()
-            .filter(|s| !is_local(s) || local_on)
+            .filter(|s| {
+                (!is_local(s) || local_on)
+                    && (!is_rtlsdr(s) || rtlsdr_on)
+                    && (is_local(s) || is_rtlsdr(s) || online_on)
+            })
             .cloned()
             .collect();
         ranked.sort_by_key(|s| {
-            if is_local(s) {
+            if is_rtlsdr(s) {
                 return 0;
+            }
+            if is_local(s) {
+                return 1;
             }
             order
                 .iter()
                 .position(|n| n == s.name())
-                .map(|p| p + 1)
+                .map(|p| p + 2)
                 .unwrap_or(usize::MAX)
         });
         ranked
+    }
+
+    /// RTL-SDR / local-receiver are "ours" — free, local, always worth
+    /// asking. Everything else is a shared community aggregator, only one
+    /// of which gets queried per poll (a fallback chain among themselves).
+    fn is_locally_owned(name: &str) -> bool {
+        name == crate::ingest::local::NAME || name == crate::ingest::rtlsdr::NAME
     }
 
     fn note_requests(&self, n: usize) -> u32 {
@@ -142,13 +178,29 @@ impl Poller {
         }
     }
 
+    /// Queries every enabled source and merges the results by hex (first —
+    /// i.e. highest-ranked, see `ordered_sources` — source to report a given
+    /// aircraft wins for it), rather than stopping at the first source that
+    /// responds. Locally-owned sources (RTL-SDR, local receiver) are always
+    /// all queried; community aggregators remain a fallback chain among
+    /// themselves (only one queried per poll — they're redundant with each
+    /// other, and hitting both would just double the external request load
+    /// for no benefit).
     async fn poll_once(&self, app: &AppHandle, area: Area) {
         let queries = queries_for_area(&area);
         let sources = self.ordered_sources();
-        let mut last_err: Option<String> = None;
         let now_before = now_ms();
 
+        let mut merged: HashMap<String, Aircraft> = HashMap::new();
+        let mut active_names: Vec<String> = Vec::new();
+        let mut last_err: Option<String> = None;
+        // Only community-source attempts count against the rate-limit-aware
+        // req/min stat — RTL-SDR/local-receiver aren't rate-limited services.
+        let mut community_requests = 0usize;
+
         for source in sources {
+            let is_local_source = Self::is_locally_owned(source.name());
+
             if let Some(until) = self.cooldown.lock().get(source.name()).copied() {
                 if now_before < until {
                     last_err = Some(format!(
@@ -158,6 +210,9 @@ impl Poller {
                     ));
                     continue;
                 }
+            }
+            if !is_local_source {
+                community_requests += queries.len();
             }
 
             match source.snapshot(&queries).await {
@@ -173,63 +228,17 @@ impl Poller {
                     for ac in &mut list {
                         self.enricher.fill_identity(ac);
                     }
-                    let feed_total = list.len() as u64;
-                    let mut diff = self.live.ingest(list, feed_total, now);
-
-                    if self.settings.lock().logbook_enabled && !diff.added.is_empty() {
-                        self.logbook.record(&diff.added, now);
+                    for ac in list {
+                        merged.entry(ac.hex.clone()).or_insert(ac);
                     }
-
-                    let places = self.settings.lock().places.clone();
-                    let alerts = self.alerts.evaluate(&diff, &places);
-
-                    if self.settings.lock().history_enabled {
-                        let mut events = std::mem::take(&mut diff.events);
-                        for a in &alerts {
-                            events.push(AircraftEvent {
-                                hex: a.hex.clone(),
-                                at: a.at,
-                                kind: EventKind::Alert,
-                                flight: None,
-                                from: None,
-                                to: Some(a.reason.clone()),
-                                lat: None,
-                                lon: None,
-                            });
-                        }
-                        if !events.is_empty() {
-                            self.history.record(&events);
-                            for ev in &events {
-                                let _ = app.emit("aircraft-event", ev);
-                            }
-                        }
-                    }
-
-                    let _ = app.emit("aircraft-diff", &diff);
-                    for ev in alerts {
-                        let _ = app.emit("alert", &ev);
-                    }
-
+                    active_names.push(source.name().to_string());
                     self.cooldown.lock().remove(source.name());
 
-                    let rpm = self.note_requests(queries.len());
-                    {
-                        let mut st = self.status.lock();
-                        if st.active_source != source.name() {
-                            tracing::info!(
-                                "feeding from {} ({} aircraft in view)",
-                                source.name(),
-                                diff.total
-                            );
-                        }
-                        st.active_source = source.name().to_string();
-                        st.healthy = true;
-                        st.last_error = None;
-                        st.last_success_at = Some(now);
-                        st.requests_last_minute = rpm;
+                    if !is_local_source {
+                        // A community source answered — that fallback chain
+                        // is satisfied for this poll.
+                        break;
                     }
-                    let _ = app.emit("source-status", &*self.status.lock());
-                    return;
                 }
                 Err(e) => {
                     let msg = e.to_string();
@@ -247,15 +256,78 @@ impl Poller {
                     } else {
                         tracing::warn!("source {} failed: {msg}", source.name());
                     }
+                    // Local sources failing doesn't stop us trying the next
+                    // (independent) one; a community source failing falls
+                    // through to the next one in the fallback chain. Either
+                    // way: just continue the loop.
                 }
             }
         }
 
-        let rpm = self.note_requests(queries.len());
-        {
+        let rpm = self.note_requests(community_requests);
+
+        if active_names.is_empty() {
             let mut st = self.status.lock();
             st.healthy = false;
             st.last_error = last_err;
+            st.requests_last_minute = rpm;
+            drop(st);
+            let _ = app.emit("source-status", &*self.status.lock());
+            return;
+        }
+
+        let now = now_ms();
+        let list: Vec<Aircraft> = merged.into_values().collect();
+        let feed_total = list.len() as u64;
+        let mut diff = self.live.ingest(list, feed_total, now);
+
+        if self.settings.lock().logbook_enabled && !diff.added.is_empty() {
+            self.logbook.record(&diff.added, now);
+        }
+
+        let places = self.settings.lock().places.clone();
+        let alerts = self.alerts.evaluate(&diff, &places);
+
+        if self.settings.lock().history_enabled {
+            let mut events = std::mem::take(&mut diff.events);
+            for a in &alerts {
+                events.push(AircraftEvent {
+                    hex: a.hex.clone(),
+                    at: a.at,
+                    kind: EventKind::Alert,
+                    flight: None,
+                    from: None,
+                    to: Some(a.reason.clone()),
+                    lat: None,
+                    lon: None,
+                });
+            }
+            if !events.is_empty() {
+                self.history.record(&events);
+                for ev in &events {
+                    let _ = app.emit("aircraft-event", ev);
+                }
+            }
+        }
+
+        let _ = app.emit("aircraft-diff", &diff);
+        for ev in alerts {
+            let _ = app.emit("alert", &ev);
+        }
+
+        {
+            let mut st = self.status.lock();
+            if st.active_sources != active_names {
+                tracing::info!(
+                    "feeding from {} ({} aircraft in view)",
+                    active_names.join(" + "),
+                    diff.total
+                );
+            }
+            st.active_sources = active_names;
+            st.healthy = true;
+            st.last_error = None;
+            st.last_success_at = Some(now);
             st.requests_last_minute = rpm;
         }
         let _ = app.emit("source-status", &*self.status.lock());

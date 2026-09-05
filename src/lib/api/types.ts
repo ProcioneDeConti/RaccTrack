@@ -36,7 +36,7 @@ export interface Aircraft {
   interesting: boolean;
   pia: boolean;
   ladd: boolean;
-  source: string; // "adsb.lol" | "adsb.fi" | "local"
+  source: string; // "adsb.lol" | "adsb.fi" | "local receiver" | "rtl-sdr"
 }
 
 export interface Preset {
@@ -118,7 +118,9 @@ export interface AircraftDetail {
 }
 
 export interface SourceStatus {
-  activeSource: string;
+  /** Every source that contributed aircraft this poll — can be more than
+   *  one now (e.g. a direct RTL-SDR feed merged with adsb.fi). */
+  activeSources: string[];
   healthy: boolean;
   lastError: string | null;
   lastSuccessAt: number | null;
@@ -301,6 +303,9 @@ export interface PlaceAlert {
   radiusNm: number;
   ceilingFt: number | null;
   notableOnly: boolean;
+  /** User-drawn polygon geofence, `[lat, lon]` vertices (open ring). When
+   *  set with >= 3 points this replaces the circular radius entirely. */
+  shape: [number, number][] | null;
 }
 
 export interface Place {
@@ -312,6 +317,30 @@ export interface Place {
   bbox: [number, number, number, number] | null;
   primary: boolean;
   alert: PlaceAlert;
+  /** This place is where the RTL-SDR antenna physically sits — drives the
+   *  coverage-polygon calculation, independent of `primary`. */
+  rtlsdrLocation: boolean;
+}
+
+export interface CoverageBearing {
+  bearingDeg: number;
+  distanceNm: number;
+}
+
+export interface CoverageResult {
+  receiverLat: number;
+  receiverLon: number;
+  receiverGroundElevFt: number;
+  targetAltFt: number;
+  antennaHeightFt: number;
+  points: CoverageBearing[];
+}
+
+export interface MapColors {
+  /** Airspace category (e.g. "CLASS_B", "RESTRICTED") -> hex color override. */
+  airspace: Record<string, string>;
+  geofenceFill: string | null;
+  geofenceLine: string | null;
 }
 
 export interface AppSettings {
@@ -319,11 +348,30 @@ export interface AppSettings {
   sourceOrder: string[];
   localReceiverEnabled: boolean;
   localReceiverUrl: string;
+  /** Decode ADS-B directly from a USB RTL-SDR dongle — outranks even the
+   *  local receiver when on. */
+  rtlsdrEnabled: boolean;
+  rtlsdrDeviceIndex: number;
+  /** Manual gain in tenths of dB (e.g. 297 = 29.7 dB); null = auto gain. */
+  rtlsdrGainTenthsDb: number | null;
+  /** Master switch for the community aggregators (adsb.lol / adsb.fi). Off
+   *  means local sources (RTL-SDR / local receiver) only — no online lookups. */
+  onlineSourcesEnabled: boolean;
+  /** Show the estimated RTL-SDR reception polygon, computed from terrain
+   *  line-of-sight around whichever place has `rtlsdrLocation` set. */
+  coverageEnabled: boolean;
+  coverageTargetAltFt: number;
+  /** Antenna height above *ground* (not sea level) at the receiver, feet. */
+  coverageAntennaHeightFt: number;
   basemap: string;
+  /** App chrome theme, independent of the basemap's own light/dark tiles.
+   *  "auto" follows the basemap (legacy behavior). */
+  uiTheme: "auto" | "light" | "dark";
   home: HomeLocation | null;
   places: Place[];
   contact: string;
   layers: MapLayers;
+  colors: MapColors;
   rangeRingsNm: number[];
   pinned: string[];
   emergencyWatchEnabled: boolean;
@@ -335,9 +383,19 @@ export interface AppSettings {
   units: "imperial" | "metric";
   notificationsEnabled: boolean;
   showAllTrails: boolean;
+  /** First-launch safety/data disclaimer (DISCLAIMER.md) has been dismissed. */
+  disclaimerAcknowledged: boolean;
 }
 
 export interface LocalReceiverProbe {
   aircraft: number;
   withPosition: number;
+}
+
+export interface RtlSdrStatus {
+  enabled: boolean;
+  deviceOpen: boolean;
+  messagesDecoded: number;
+  aircraftTracked: number;
+  lastError: string | null;
 }

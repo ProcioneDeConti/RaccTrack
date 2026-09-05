@@ -25,6 +25,24 @@ fn haversine_nm(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     2.0 * r * a.sqrt().asin()
 }
 
+/// Ray-casting point-in-polygon test. `poly` is an open ring of `[lat, lon]`
+/// vertices (no repeated closing point needed). Good enough at geofence scale
+/// (a few nm) where the lat/lon grid is locally near-flat.
+fn point_in_polygon(lat: f64, lon: f64, poly: &[[f64; 2]]) -> bool {
+    let mut inside = false;
+    let n = poly.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let (yi, xi) = (poly[i][0], poly[i][1]);
+        let (yj, xj) = (poly[j][0], poly[j][1]);
+        if ((yi > lat) != (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
 /// Stable fired-set key for a place id — large positive so it can't collide
 /// with a watch row id (autoincrement, small) or the emergency key (-1).
 fn place_key(id: &str) -> i64 {
@@ -274,8 +292,18 @@ impl Alerts {
             // Proximity alerts on saved places.
             if let (Some(lat), Some(lon)) = (ac.lat, ac.lon) {
                 for p in &geofences {
-                    let d = haversine_nm(p.lat, p.lon, lat, lon);
-                    if d > p.alert.radius_nm {
+                    let polygon = p.alert.shape.as_deref().filter(|s| s.len() >= 3);
+                    let (inside, reason_prefix) = match polygon {
+                        Some(poly) => (
+                            point_in_polygon(lat, lon, poly),
+                            format!("inside {}", p.label),
+                        ),
+                        None => {
+                            let d = haversine_nm(p.lat, p.lon, lat, lon);
+                            (d <= p.alert.radius_nm, format!("{:.0} nm from {}", d, p.label))
+                        }
+                    };
+                    if !inside {
                         continue;
                     }
                     if let Some(ceil) = p.alert.ceiling_ft {
@@ -295,7 +323,7 @@ impl Alerts {
                             .unwrap_or_default();
                         out.push(AlertEvent {
                             hex: ac.hex.clone(),
-                            reason: format!("{:.0} nm from {}{alt}", d, p.label),
+                            reason: format!("{reason_prefix}{alt}"),
                             watch_id: None,
                             emergency: false,
                             at: now,
@@ -426,11 +454,13 @@ mod tests {
             kind: None,
             bbox: None,
             primary: true,
+            rtlsdr_location: false,
             alert: PlaceAlert {
                 enabled: true,
                 radius_nm: 10.0,
                 ceiling_ft: Some(8000.0),
                 notable_only: false,
+                shape: None,
             },
         };
 
@@ -465,5 +495,50 @@ mod tests {
             std::slice::from_ref(&place),
         );
         assert!(ev.is_empty());
+    }
+
+    #[test]
+    fn place_polygon_geofence() {
+        use crate::config::{Place, PlaceAlert};
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let a = Alerts::new(db);
+        // A ~0.2°-square box around (40, -73) — plenty big at this latitude.
+        let place = Place {
+            id: "p1".into(),
+            label: "Airfield".into(),
+            lat: 40.0,
+            lon: -73.0,
+            kind: None,
+            bbox: None,
+            primary: true,
+            rtlsdr_location: false,
+            alert: PlaceAlert {
+                enabled: true,
+                radius_nm: 1.0, // deliberately small — shape should win, not this
+                ceiling_ft: None,
+                notable_only: false,
+                shape: Some(vec![
+                    [39.9, -73.1],
+                    [39.9, -72.9],
+                    [40.1, -72.9],
+                    [40.1, -73.1],
+                ]),
+            },
+        };
+
+        // Inside the box but ~7 nm from centre — well outside radius_nm, but
+        // the shape takes over entirely once it's set.
+        let mut inside = base("in");
+        inside.lat = Some(40.05);
+        inside.lon = Some(-73.05);
+        // Outside the box.
+        let mut outside = base("out");
+        outside.lat = Some(40.2);
+        outside.lon = Some(-73.05);
+
+        let ev = a.evaluate(&diff_with(vec![inside, outside]), std::slice::from_ref(&place));
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].hex, "in");
+        assert!(ev[0].reason.contains("inside Airfield"));
     }
 }

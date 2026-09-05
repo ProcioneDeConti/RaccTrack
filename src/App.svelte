@@ -13,6 +13,7 @@
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import AboutPanel from "./lib/about/AboutPanel.svelte";
+  import DisclaimerModal from "./lib/about/DisclaimerModal.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import AlertToast from "./lib/watchlist/AlertToast.svelte";
   import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
@@ -26,7 +27,12 @@
     sourceStatus,
     pinned,
     places,
+    mapColors,
+    uiTheme,
     emergencyCount,
+    disclaimerOpen,
+    coverageEnabled,
+    coverageResult,
   } from "./lib/state";
   import {
     onDiff,
@@ -36,6 +42,7 @@
     getSnapshot,
     getSourceStatus,
     getSettings,
+    computeCoverage,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { horizonOpen } from "./lib/horizon";
@@ -59,6 +66,9 @@
   let panel: PanelId = "none";
   let notificationsEnabled = true;
   let mapView: MapView;
+  /** True while the disclaimer is up because it's never been acknowledged —
+   *  vs. reopened later from About, where a plain close (no re-ack) is fine. */
+  let disclaimerFirstLaunch = false;
 
   function currentBbox(): Bbox | null {
     return mapView?.currentBounds?.() ?? null;
@@ -90,6 +100,23 @@
         units.set(s.units);
         pinned.set(s.pinned ?? []);
         places.set(s.places ?? []);
+        mapColors.set(s.colors ?? { airspace: {}, geofenceFill: null, geofenceLine: null });
+        uiTheme.set(s.uiTheme ?? "auto");
+        if (!s.disclaimerAcknowledged) {
+          disclaimerFirstLaunch = true;
+          disclaimerOpen.set(true);
+        }
+        coverageEnabled.set(s.coverageEnabled ?? false);
+        if (s.coverageEnabled) {
+          // Backend caches the terrain calculation ~30 days, so this is
+          // normally an instant cache hit, not a fresh external-API run.
+          computeCoverage()
+            .then((r) => coverageResult.set(r))
+            .catch(() => {
+              /* no RTL-SDR location set yet, or a fetch hiccup — fine, the
+                 Settings panel surfaces the real error if the user asks */
+            });
+        }
       } catch {
         /* backend still starting */
       }
@@ -167,6 +194,9 @@
     <AlertToast />
   </div>
   <StatusBar />
+  {#if $disclaimerOpen}
+    <DisclaimerModal firstLaunch={disclaimerFirstLaunch} />
+  {/if}
 </main>
 
 <style>

@@ -49,6 +49,19 @@ licenses noted; live services are queried at runtime and are not redistributed.
   tar1090 aircraft.json served on the user's own network. Those projects are
   not bundled or redistributed.
 
+- Direct RTL-SDR dongle support (optional): device I/O via the `rs-rtl` crate
+  (MIT), a pure-Rust RTL-SDR driver — https://github.com/xoolive/desperado.
+  Mode S/ADS-B message decoding via the `adsb_deku` crate (MIT) —
+  https://github.com/rsadsb/adsb_deku. The raw-IQ demodulator itself
+  (src-tauri/src/ingest/rtlsdr/demod.rs) is this project's own from-spec
+  implementation, not derived from either.
+
+- USB driver setup (Windows, optional, user-triggered): Settings' "Fix USB
+  driver" button downloads the latest Zadig release directly from GitHub
+  (https://github.com/pbatard/libwdi) at runtime and launches it. Zadig
+  itself is GPL-3.0 (libwdi is LGPL-3.0); it is not bundled or redistributed
+  with this app, only downloaded on demand and run as its own process.
+
 - User-interface icons (src/lib/ui/Icon.svelte): path geometry from Lucide
   (https://lucide.dev), ISC License. Copyright (c) for portions of this code are
   held by Lucide Contributors 2022. Lucide is a fork of Feather (MIT, Copyright

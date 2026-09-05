@@ -8,6 +8,8 @@ import type {
   AppSettings,
   GeoResult,
   LocalReceiverProbe,
+  RtlSdrStatus,
+  CoverageResult,
   Sighting,
   SourceStatus,
   TrailPoint,
@@ -79,6 +81,22 @@ export function exportLogbook(): Promise<string> {
 
 export function testLocalReceiver(url: string): Promise<LocalReceiverProbe> {
   return invoke("test_local_receiver", { url });
+}
+
+export function listRtlsdrDevices(): Promise<string[]> {
+  return invoke("list_rtlsdr_devices");
+}
+
+export function rtlsdrStatus(): Promise<RtlSdrStatus> {
+  return invoke("rtlsdr_status");
+}
+
+export function fixUsbDriver(): Promise<void> {
+  return invoke("fix_usb_driver");
+}
+
+export function computeCoverage(): Promise<CoverageResult> {
+  return invoke("compute_coverage");
 }
 
 export function getAllTrails(): Promise<Record<string, TrailPoint[]>> {

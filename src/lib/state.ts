@@ -1,8 +1,9 @@
 import { writable, derived, get } from "svelte/store";
-import type { Aircraft, AircraftDiff, SourceStatus } from "./api/types";
+import type { Aircraft, AircraftDiff, CoverageResult, SourceStatus } from "./api/types";
 import { iconKindFor, sizeMulFor } from "./map/icons";
-import { altColor, EMERGENCY } from "./theme/colors";
+import { altColor, altColorOnLight, EMERGENCY } from "./theme/colors";
 import { matchesFilters, type Filters, defaultFilters } from "./filters/filters";
+import { altitude as fmtAltitude, units } from "./format";
 
 /** Live aircraft keyed by hex. */
 export const aircraft = writable<Map<string, Aircraft>>(new Map());
@@ -15,8 +16,10 @@ export const sourceStatus = writable<SourceStatus | null>(null);
 /** count of aircraft squawking an emergency code anywhere in North America */
 export const emergencyCount = writable(0);
 export const basemap = writable<string>("darkMatter");
+/** App chrome theme — "auto" follows the basemap's own light/dark tiles. */
+export const uiTheme = writable<"auto" | "light" | "dark">("auto");
 
-import type { MapLayers, Place } from "./api/types";
+import type { MapColors, MapLayers, Place } from "./api/types";
 /** All saved locations. */
 export const places = writable<Place[]>([]);
 /** The primary place — drives the rail "go to" button + range rings. */
@@ -26,6 +29,26 @@ export const primaryPlace = derived(
 );
 /** bumped to ask MapView to recenter on the primary place */
 export const goHomeSignal = writable(0);
+
+/** User color overrides for airspace categories + geofences. */
+export const mapColors = writable<MapColors>({
+  airspace: {},
+  geofenceFill: null,
+  geofenceLine: null,
+});
+
+/** Non-null while the user is hand-drawing a geofence polygon for this
+ *  place on the map (see MapView's click-to-add-vertex handling). */
+export const geofenceDraft = writable<{ placeId: string } | null>(null);
+
+/** Shown on first launch (until acknowledged) and re-openable from About. */
+export const disclaimerOpen = writable(false);
+
+/** Latest computed RTL-SDR reception polygon, shared between Settings
+ *  (triggers the computation) and MapView (renders it). */
+export const coverageResult = writable<CoverageResult | null>(null);
+/** Live mirror of `AppSettings.coverageEnabled` — whether to show it. */
+export const coverageEnabled = writable(false);
 
 export const layers = writable<MapLayers>({
   airports: false,
@@ -135,10 +158,19 @@ export interface AircraftFeature {
     sizeMul: number;
     rotation: number;
     color: string;
+    /** Same altitude-band color as `color`, darkened for legible text on the
+     *  map label chip's light-background variant. */
+    altTextColorOnLight: string;
     callsign: string;
     altBaro: number | null;
+    /** Map-chip altitude text — "0ft/m - GROUND" while grounded, "" only
+     *  when airborne with no altitude data at all. */
+    altLabel: string;
     military: boolean;
     emergency: boolean;
+    /** Received straight off the user's own RTL-SDR dongle, not a community
+     *  feed / local-receiver relay. */
+    direct: boolean;
   };
 }
 
@@ -148,7 +180,7 @@ export interface AircraftFeature {
  * `setFeatureState` so clicking an aircraft doesn't rebuild every feature.
  */
 export const aircraftGeoJson = derived(
-  [aircraft, filters],
+  [aircraft, filters, units],
   ([$aircraft, $filters]) => {
     const features: AircraftFeature[] = [];
     for (const a of $aircraft.values()) {
@@ -170,10 +202,17 @@ export const aircraftGeoJson = derived(
           sizeMul,
           rotation: heading ?? 0,
           color: emergency ? EMERGENCY : altColor(a.altBaro, a.onGround),
+          altTextColorOnLight: emergency ? EMERGENCY : altColorOnLight(a.altBaro, a.onGround),
           callsign: (a.flight ?? a.registration ?? a.hex).trim(),
           altBaro: a.altBaro,
+          altLabel: a.onGround
+            ? "GROUND"
+            : a.altBaro === null
+              ? ""
+              : fmtAltitude(a.altBaro),
           military: a.military,
           emergency,
+          direct: a.source === "rtl-sdr",
         },
       });
     }

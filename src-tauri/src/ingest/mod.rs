@@ -5,6 +5,7 @@
 
 pub mod local;
 pub mod model;
+pub mod rtlsdr;
 
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -12,6 +13,7 @@ use model::{Aircraft, AircraftResponse, RawAircraft};
 use std::time::Duration;
 
 pub use local::LocalReceiverSource;
+pub use rtlsdr::RtlSdrSource;
 
 use crate::region::Area;
 

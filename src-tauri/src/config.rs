@@ -36,6 +36,13 @@ pub struct Place {
     pub primary: bool,
     #[serde(default)]
     pub alert: PlaceAlert,
+    /// This place is where the RTL-SDR dongle's antenna actually sits —
+    /// drives the coverage-polygon calculation. Independent of `primary`
+    /// (e.g. "Home" can stay primary for viewing while a separate "Attic
+    /// antenna" place marks the receiver). At most one should be set; if
+    /// several are, the coverage calculation just uses the first found.
+    #[serde(default)]
+    pub rtlsdr_location: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +58,11 @@ pub struct PlaceAlert {
     /// Only alert for military / interesting / PIA / LADD airframes.
     #[serde(default)]
     pub notable_only: bool,
+    /// A user-drawn polygon geofence — `[lat, lon]` vertices, an open ring
+    /// (no repeated closing point). When present with >= 3 points, this
+    /// replaces the circular `radius_nm` test entirely for this place.
+    #[serde(default)]
+    pub shape: Option<Vec<[f64; 2]>>,
 }
 
 impl Default for PlaceAlert {
@@ -60,6 +72,7 @@ impl Default for PlaceAlert {
             radius_nm: default_alert_radius(),
             ceiling_ft: None,
             notable_only: false,
+            shape: None,
         }
     }
 }
@@ -87,7 +100,38 @@ pub struct AppSettings {
     pub local_receiver_enabled: bool,
     #[serde(default = "default_local_receiver_url")]
     pub local_receiver_url: String,
+    /// Decode ADS-B directly from a USB RTL-SDR dongle plugged into this
+    /// machine, bypassing the community feeds entirely for local traffic.
+    /// When enabled it's tried first, ahead of even the local receiver.
+    #[serde(default)]
+    pub rtlsdr_enabled: bool,
+    /// `rs_rtl::DeviceId::Index` — which dongle to use when more than one is
+    /// plugged in.
+    #[serde(default)]
+    pub rtlsdr_device_index: u32,
+    /// Manual gain in tenths of dB (e.g. 297 = 29.7 dB); `None` = auto gain.
+    #[serde(default)]
+    pub rtlsdr_gain_tenths_db: Option<i32>,
+    /// Master switch for the community aggregators (adsb.lol / adsb.fi).
+    /// Off means *only* whatever local sources (RTL-SDR / local receiver)
+    /// are enabled — no online lookups at all.
+    #[serde(default = "default_true")]
+    pub online_sources_enabled: bool,
+    /// Show the estimated RTL-SDR reception polygon on the map — computed
+    /// from terrain line-of-sight around whichever place has
+    /// `rtlsdr_location` set, for `coverage_target_alt_ft`.
+    #[serde(default)]
+    pub coverage_enabled: bool,
+    #[serde(default = "default_coverage_alt")]
+    pub coverage_target_alt_ft: u32,
+    /// Antenna height above *ground* (not sea level) at the receiver, feet.
+    #[serde(default = "default_antenna_height")]
+    pub coverage_antenna_height_ft: f64,
     pub basemap: String,
+    /// App chrome (panels/rail/buttons) theme — independent of the basemap's
+    /// own light/dark tiles. "auto" follows the basemap (legacy behavior).
+    #[serde(default = "default_ui_theme")]
+    pub ui_theme: String,
     /// Legacy single home — migrated into `places` on load, then left null.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home: Option<HomeLocation>,
@@ -99,6 +143,8 @@ pub struct AppSettings {
     pub contact: String,
     #[serde(default)]
     pub layers: MapLayers,
+    #[serde(default)]
+    pub colors: MapColors,
     #[serde(default = "default_range_rings")]
     pub range_rings_nm: Vec<f64>,
     #[serde(default)]
@@ -116,6 +162,24 @@ pub struct AppSettings {
     pub units: String, // "imperial" | "metric"
     pub notifications_enabled: bool,
     pub show_all_trails: bool,
+    /// User has dismissed the first-launch safety/data disclaimer
+    /// (see DISCLAIMER.md) — shown again on every launch until set.
+    #[serde(default)]
+    pub disclaimer_acknowledged: bool,
+}
+
+/// User overrides for the data-driven map colours (frontend `theme/colors.ts`
+/// picks the defaults; this only carries overrides the user has chosen).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MapColors {
+    /// Airspace category (e.g. "CLASS_B", "RESTRICTED") -> hex color.
+    #[serde(default)]
+    pub airspace: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub geofence_fill: Option<String>,
+    #[serde(default)]
+    pub geofence_line: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -139,11 +203,20 @@ fn default_range_rings() -> Vec<f64> {
 fn default_true() -> bool {
     true
 }
+fn default_coverage_alt() -> u32 {
+    5_000
+}
+fn default_antenna_height() -> f64 {
+    20.0
+}
 fn default_history_days() -> u32 {
     30
 }
 fn default_local_receiver_url() -> String {
     crate::ingest::local::DEFAULT_URL.to_string()
+}
+fn default_ui_theme() -> String {
+    "auto".into()
 }
 
 impl Default for AppSettings {
@@ -155,11 +228,20 @@ impl Default for AppSettings {
             source_order: vec!["adsb.fi".into(), "adsb.lol".into()],
             local_receiver_enabled: false,
             local_receiver_url: default_local_receiver_url(),
+            rtlsdr_enabled: false,
+            rtlsdr_device_index: 0,
+            rtlsdr_gain_tenths_db: None,
+            online_sources_enabled: true,
+            coverage_enabled: false,
+            coverage_target_alt_ft: default_coverage_alt(),
+            coverage_antenna_height_ft: default_antenna_height(),
             basemap: "darkMatter".into(),
+            ui_theme: default_ui_theme(),
             home: None,
             places: Vec::new(),
             contact: String::new(),
             layers: MapLayers::default(),
+            colors: MapColors::default(),
             range_rings_nm: default_range_rings(),
             pinned: Vec::new(),
             emergency_watch_enabled: true,
@@ -171,6 +253,7 @@ impl Default for AppSettings {
             units: "imperial".into(),
             notifications_enabled: true,
             show_all_trails: false,
+            disclaimer_acknowledged: false,
         }
     }
 }
@@ -200,6 +283,7 @@ impl AppSettings {
                     bbox: home.bbox,
                     primary: true,
                     alert: PlaceAlert::default(),
+                    rtlsdr_location: false,
                 });
             }
         }
@@ -207,13 +291,6 @@ impl AppSettings {
         if !self.places.is_empty() && !self.places.iter().any(|p| p.primary) {
             self.places[0].primary = true;
         }
-    }
-
-    pub fn primary_place(&self) -> Option<&Place> {
-        self.places
-            .iter()
-            .find(|p| p.primary)
-            .or_else(|| self.places.first())
     }
 
     pub fn save(&self, db: &Db) -> Result<()> {
@@ -234,8 +311,18 @@ impl AppSettings {
         if self.units != "metric" {
             self.units = "imperial".into();
         }
+        if !matches!(self.ui_theme.as_str(), "auto" | "light" | "dark") {
+            self.ui_theme = default_ui_theme();
+        }
         for p in &mut self.places {
             p.alert.radius_nm = p.alert.radius_nm.clamp(0.5, 250.0);
+            // A degenerate or absurdly large ring isn't a usable geofence —
+            // drop it back to the circle rather than persist garbage.
+            if let Some(shape) = &p.alert.shape {
+                if shape.len() < 3 || shape.len() > 200 {
+                    p.alert.shape = None;
+                }
+            }
         }
         self.migrate(); // keep the one-primary invariant
     }
