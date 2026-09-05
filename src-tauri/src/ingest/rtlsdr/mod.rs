@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
-use adsb_deku::adsb::{EmergencyState, TypeCoding, ME};
+use adsb_deku::adsb::{AircraftStatusType, EmergencyState, TypeCoding, ME};
 use adsb_deku::{cpr, Altitude, CPRFormat, Frame, DF};
 use anyhow::Result;
 use async_trait::async_trait;
@@ -436,7 +436,21 @@ fn apply_frame(tracks: &mut HashMap<String, Track>, frame: Frame, now: i64) -> b
             }
             t.category = Some(category_string(identification.tc, identification.ca));
         }
-        ME::AircraftStatus(status) => {
+        // BDS 6,1 ("aircraft status") reuses the same bit positions after
+        // `sub_type` for unrelated data depending on which subtype it is —
+        // `emergency_state`/`squawk` are only meaningful for subtype 1
+        // (Emergency/priority status). Subtype 2 (ACAS RA broadcast, sent
+        // for the duration of an actual TCAS resolution advisory — not
+        // uncommon for a TCAS-equipped aircraft with nearby traffic) packs
+        // RA-related bits into that same space; reading them as
+        // emergency_state/squawk regardless of subtype (as this code used
+        // to) decodes an active RA as a false emergency squawk roughly as
+        // often as the RA bits happen to land on a non-zero 3-bit pattern.
+        // Subtype 0 (no information) and reserved subtypes carry nothing
+        // meaningful there either. Confirmed against a real recurring false
+        // "emergency" alert from one aircraft (a6a6fe/N528DN) that turned
+        // out to be exactly this.
+        ME::AircraftStatus(status) if status.sub_type == AircraftStatusType::EmergencyPriorityStatus => {
             t.emergency = match status.emergency_state {
                 EmergencyState::None => None,
                 other => Some(format!("{other}").replace(' ', "_")),
@@ -446,6 +460,66 @@ fn apply_frame(tracks: &mut HashMap<String, Track>, frame: Frame, now: i64) -> b
         _ => {}
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adsb_deku::adsb::ADSB;
+    use adsb_deku::{Capability, ICAO};
+
+    fn status_frame(sub_type: AircraftStatusType, emergency_state: EmergencyState, squawk: u32) -> Frame {
+        Frame {
+            df: DF::ADSB(ADSB {
+                capability: Capability::AG_AIRBORNE,
+                icao: ICAO([0xa6, 0xa6, 0xfe]),
+                me: ME::AircraftStatus(adsb_deku::adsb::AircraftStatus {
+                    sub_type,
+                    emergency_state,
+                    squawk,
+                }),
+                pi: ICAO([0, 0, 0]),
+            }),
+            crc: 0,
+        }
+    }
+
+    /// Regression test for a real false-positive: an ACAS RA broadcast
+    /// (subtype 2) reusing the emergency/squawk bit positions for RA data
+    /// was being read as a genuine emergency squawk (see the comment on the
+    /// `ME::AircraftStatus` match arm above).
+    #[test]
+    fn acas_ra_broadcast_is_not_read_as_emergency() {
+        let mut tracks = HashMap::new();
+        let frame = status_frame(AircraftStatusType::ACASRaBroadcast, EmergencyState::General, 7700);
+        assert!(apply_frame(&mut tracks, frame, 0));
+        let t = &tracks["a6a6fe"];
+        assert_eq!(t.emergency, None);
+        assert_eq!(t.squawk, None);
+    }
+
+    #[test]
+    fn no_information_subtype_is_not_read_as_emergency() {
+        let mut tracks = HashMap::new();
+        let frame = status_frame(AircraftStatusType::NoInformation, EmergencyState::DownedAircraft, 7700);
+        assert!(apply_frame(&mut tracks, frame, 0));
+        let t = &tracks["a6a6fe"];
+        assert_eq!(t.emergency, None);
+        assert_eq!(t.squawk, None);
+    }
+
+    #[test]
+    fn real_emergency_priority_status_is_still_decoded() {
+        let mut tracks = HashMap::new();
+        // `squawk` here is already the post-`decode_id13_field` decimal value
+        // (as deku's parser would hand `apply_frame`, not the raw 13 bits) —
+        // 0o7700 == 4032, so `{:04o}` recovers the "7700" a human reads.
+        let frame = status_frame(AircraftStatusType::EmergencyPriorityStatus, EmergencyState::General, 4032);
+        assert!(apply_frame(&mut tracks, frame, 0));
+        let t = &tracks["a6a6fe"];
+        assert_eq!(t.emergency.as_deref(), Some("general"));
+        assert_eq!(t.squawk.as_deref(), Some("7700"));
+    }
 }
 
 /// Probe for connected dongles (Settings "detect device" button).
