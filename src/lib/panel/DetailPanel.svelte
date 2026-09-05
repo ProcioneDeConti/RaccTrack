@@ -231,6 +231,11 @@
           >
         {/if}
         {#if live?.military}<span class="tag mil">MIL</span>{/if}
+        {#if live?.interesting}<span class="tag notable">INT</span>{/if}
+        {#if live?.pia}
+          <span class="tag notable" title="Privacy ICAO Address — this hex may be reassigned to a different aircraft once this flight/session ends">PIA</span>
+        {/if}
+        {#if live?.ladd}<span class="tag notable">LADD</span>{/if}
         {#if live?.emergency && live.emergency !== "none"}
           <span class="tag emg">{live.emergency.toUpperCase()}</span>
         {/if}
@@ -441,6 +446,11 @@
   .tag.mil {
     background: #274d3d;
     color: #7ee2b8;
+  }
+  .tag.notable {
+    background: var(--bg-elev);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
   }
   .tag.emg {
     background: var(--emergency);
