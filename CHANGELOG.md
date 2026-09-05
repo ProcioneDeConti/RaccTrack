@@ -8,6 +8,16 @@ app is pre-1.0, a minor bump may still include breaking changes.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-05
+
+### Added
+
+- Portable mode: dropping a `portable.txt` file next to the executable
+  makes it store all persistent data (settings, database, tile cache) in a
+  `data` folder beside itself instead of the normal per-user AppData
+  location, for a zip that can run from a USB stick with no footprint on
+  the host machine. A normal installed copy is unaffected.
+
 ## [0.3.0] - 2026-09-05
 
 ### Added
@@ -84,6 +94,7 @@ aircraft detail panel with photos/routes, airport reference layers, offline
 tile caching, and flight history logging. See `git log` for the detailed
 history predating formal versioning.
 
-[Unreleased]: https://github.com/ProcioneDeConti/RaccTrack/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ProcioneDeConti/RaccTrack/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ProcioneDeConti/RaccTrack/releases/tag/v0.3.1
 [0.3.0]: https://github.com/ProcioneDeConti/RaccTrack/releases/tag/v0.3.0
 [0.2.0]: https://github.com/ProcioneDeConti/RaccTrack/releases/tag/v0.2.0
