@@ -1,6 +1,6 @@
 {
   "name": "racctrack-adsb",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "RaccTrack (ADS-B) — free, no-paywall ADS-B flight tracker for North America",
   "license": "Apache-2.0",
   "repository": {
