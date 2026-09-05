@@ -8,6 +8,14 @@ app is pre-1.0, a minor bump may still include breaking changes.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-05
+
+### Changed
+
+- ATC listen/scan, ACARS messages, and Mode A/C contacts — all RTL-SDR-only
+  features — are now hidden until a dongle is actually plugged in, instead
+  of appearing as dead controls with nothing to back them.
+
 ## [0.3.1] - 2026-09-05
 
 ### Added
