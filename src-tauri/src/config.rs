@@ -119,6 +119,15 @@ pub struct AppSettings {
     /// instead (a single dongle can't do both at the same time).
     #[serde(default)]
     pub atc_device_index: u32,
+    /// Which dongle ACARS decoding uses — same independence rationale as
+    /// `atc_device_index`.
+    #[serde(default)]
+    pub acars_device_index: u32,
+    /// VHF frequencies (MHz) ACARS listens on/scans across. Defaults to the
+    /// commonly-cited North America primary + secondary channels; 131.550 is
+    /// by far the most active one.
+    #[serde(default = "default_acars_freqs")]
+    pub acars_freqs: Vec<f64>,
     /// Master switch for the community aggregators (adsb.lol / adsb.fi).
     /// Off means *only* whatever local sources (RTL-SDR / local receiver)
     /// are enabled — no online lookups at all.
@@ -243,6 +252,9 @@ fn default_local_receiver_url() -> String {
 fn default_ui_theme() -> String {
     "auto".into()
 }
+fn default_acars_freqs() -> Vec<f64> {
+    vec![131.550, 130.025, 130.450, 131.725, 131.825, 136.700, 136.975]
+}
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -256,6 +268,8 @@ impl Default for AppSettings {
             rtlsdr_enabled: false,
             rtlsdr_device_index: 0,
             atc_device_index: 0,
+            acars_device_index: 0,
+            acars_freqs: default_acars_freqs(),
             rtlsdr_gain_tenths_db: None,
             online_sources_enabled: true,
             coverage_enabled: false,

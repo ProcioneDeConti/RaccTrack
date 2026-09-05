@@ -1,5 +1,12 @@
 import { writable, derived, get } from "svelte/store";
-import type { Aircraft, AircraftDiff, AtcStatus, CoverageResult, SourceStatus } from "./api/types";
+import type {
+  Aircraft,
+  AircraftDiff,
+  AtcStatus,
+  AcarsStatus,
+  CoverageResult,
+  SourceStatus,
+} from "./api/types";
 import { iconKindFor, sizeMulFor } from "./map/icons";
 import { altColor, altColorOnLight, EMERGENCY } from "./theme/colors";
 import { matchesFilters, type Filters, defaultFilters } from "./filters/filters";
@@ -58,6 +65,8 @@ export const coverageEnabled = writable(false);
  *  Stop button) and in AirportPanel (to highlight the active frequency and
  *  toggle Listen -> Stop on it). */
 export const atcStatus = writable<AtcStatus | null>(null);
+/** Same polling shape as `atcStatus`, for ACARS decoding. */
+export const acarsStatus = writable<AcarsStatus | null>(null);
 
 export const layers = writable<MapLayers>({
   airports: false,

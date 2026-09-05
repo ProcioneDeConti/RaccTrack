@@ -36,7 +36,8 @@
     | "plane-takeoff"
     | "pencil"
     | "plus"
-    | "wifi";
+    | "wifi"
+    | "message-square";
 
   export const ICON_PATHS: Record<IconName, string[]> = {
     x: ["M18 6 6 18", "m6 6 12 12"],
@@ -124,6 +125,9 @@
       "M2 8.82a15 15 0 0 1 20 0",
       "M5 12.859a10 10 0 0 1 14 0",
       "M8.5 16.429a5 5 0 0 1 7 0",
+    ],
+    "message-square": [
+      "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
     ],
   };
 </script>

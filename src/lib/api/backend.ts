@@ -10,6 +10,8 @@ import type {
   LocalReceiverProbe,
   RtlSdrStatus,
   AtcStatus,
+  AcarsStatus,
+  AcarsMessage,
   CoverageResult,
   CoverageProgress,
   Sighting,
@@ -119,6 +121,30 @@ export function atcStartRecording(): Promise<string> {
 
 export function atcStopRecording(): Promise<void> {
   return invoke("atc_stop_recording");
+}
+
+export function acarsStart(mhz: number, deviceIndex: number): Promise<void> {
+  return invoke("acars_start", { mhz, deviceIndex });
+}
+
+export function acarsScan(mhz: number[], deviceIndex: number): Promise<void> {
+  return invoke("acars_scan", { mhz, deviceIndex });
+}
+
+export function acarsStop(): Promise<void> {
+  return invoke("acars_stop");
+}
+
+export function getAcarsStatus(): Promise<AcarsStatus> {
+  return invoke("acars_status");
+}
+
+export function acarsMessages(): Promise<AcarsMessage[]> {
+  return invoke("acars_messages");
+}
+
+export function acarsClearMessages(): Promise<void> {
+  return invoke("acars_clear_messages");
 }
 
 export function computeCoverage(): Promise<CoverageResult> {

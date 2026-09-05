@@ -45,6 +45,7 @@
     { id: "passes", icon: "plane-takeoff", label: "Passes overhead" },
     { id: "events", icon: "activity", label: "Events & history" },
     { id: "logbook", icon: "book", label: "Spotter logbook" },
+    { id: "acars", icon: "message-square", label: "ACARS messages" },
   ] satisfies Item[];
 </script>
 

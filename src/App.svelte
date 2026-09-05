@@ -11,6 +11,7 @@
   import PassesPanel from "./lib/passes/PassesPanel.svelte";
   import EventsPanel from "./lib/history/EventsPanel.svelte";
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
+  import AcarsPanel from "./lib/acars/AcarsPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import AboutPanel from "./lib/about/AboutPanel.svelte";
   import DisclaimerModal from "./lib/about/DisclaimerModal.svelte";
@@ -34,6 +35,7 @@
     coverageEnabled,
     coverageResult,
     atcStatus,
+    acarsStatus,
   } from "./lib/state";
   import {
     onDiff,
@@ -45,6 +47,7 @@
     getSettings,
     computeCoverage,
     getAtcStatus,
+    getAcarsStatus,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { horizonOpen } from "./lib/horizon";
@@ -62,6 +65,7 @@
     | "passes"
     | "events"
     | "logbook"
+    | "acars"
     | "settings"
     | "about";
 
@@ -155,9 +159,16 @@
     pollAtc();
     const atcTimer = window.setInterval(pollAtc, 1000);
 
+    const pollAcars = () => {
+      void getAcarsStatus().then((s) => acarsStatus.set(s));
+    };
+    pollAcars();
+    const acarsTimer = window.setInterval(pollAcars, 1000);
+
     return () => {
       unlisteners.forEach((p) => p.then((u) => u()));
       clearInterval(atcTimer);
+      clearInterval(acarsTimer);
     };
   });
 
@@ -202,6 +213,8 @@
       <EventsPanel onClose={close} />
     {:else if panel === "logbook"}
       <LogbookPanel onClose={close} />
+    {:else if panel === "acars"}
+      <AcarsPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
     {:else if panel === "about"}

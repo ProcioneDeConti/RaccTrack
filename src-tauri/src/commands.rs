@@ -221,6 +221,45 @@ pub fn atc_stop_recording(state: State<AppState>) {
     state.atc.stop_recording();
 }
 
+/// Listen for ACARS on a single VHF frequency — see `acars.rs` for the
+/// same single-dongle handoff `atc_tune` does.
+#[tauri::command]
+pub async fn acars_start(state: State<'_, AppState>, mhz: f64, device_index: u32) -> CmdResult<()> {
+    state.acars.start(vec![mhz], device_index).await.map_err(err)
+}
+
+/// Scan across several ACARS frequencies, parking on whichever currently has
+/// a burst — same dwell/hang handling as `atc_scan`.
+#[tauri::command]
+pub async fn acars_scan(
+    state: State<'_, AppState>,
+    mhz: Vec<f64>,
+    device_index: u32,
+) -> CmdResult<()> {
+    state.acars.start(mhz, device_index).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn acars_stop(state: State<'_, AppState>) -> CmdResult<()> {
+    state.acars.stop().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn acars_status(state: State<AppState>) -> crate::acars::AcarsStatus {
+    state.acars.status()
+}
+
+#[tauri::command]
+pub fn acars_messages(state: State<AppState>) -> Vec<crate::acars::AcarsMessage> {
+    state.acars.messages()
+}
+
+#[tauri::command]
+pub fn acars_clear_messages(state: State<AppState>) {
+    state.acars.clear_messages();
+}
+
 #[derive(serde::Deserialize)]
 struct GithubAsset {
     name: String,

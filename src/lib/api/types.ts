@@ -378,6 +378,11 @@ export interface AppSettings {
    *  audio at once; same index as the ADS-B dongle pauses ADS-B for the
    *  session instead. */
   atcDeviceIndex: number;
+  /** Which dongle ACARS decoding uses — same independence rationale as
+   *  atcDeviceIndex. */
+  acarsDeviceIndex: number;
+  /** VHF frequencies (MHz) ACARS listens on/scans across. */
+  acarsFreqs: number[];
   /** Master switch for the community aggregators (adsb.lol / adsb.fi). Off
    *  means local sources (RTL-SDR / local receiver) only — no online lookups. */
   onlineSourcesEnabled: boolean;
@@ -441,4 +446,31 @@ export interface AtcStatus {
   adsbPaused: boolean;
   recording: boolean;
   lastError: string | null;
+}
+
+export interface AcarsStatus {
+  running: boolean;
+  deviceOpen: boolean;
+  tunedMhz: number | null;
+  scanning: boolean;
+  retuning: boolean;
+  squelchOpen: boolean;
+  adsbPaused: boolean;
+  messageCount: number;
+  lastError: string | null;
+}
+
+export interface AcarsMessage {
+  mode: string;
+  tail: string;
+  techAck: string;
+  label: string;
+  blockId: string;
+  text: string | null;
+  /** See `acars/frame.rs` — `false` may mean a field-boundary assumption in
+   *  the decoder is wrong rather than the message being garbage. */
+  bccOk: boolean;
+  parityErrors: number;
+  freqMhz: number;
+  timestampMs: number;
 }

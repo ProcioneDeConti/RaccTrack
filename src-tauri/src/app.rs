@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 
 use arc_swap::ArcSwap;
 
+use crate::acars::AcarsListener;
 use crate::airspace::Airspace;
 use crate::atc::AtcListener;
 use crate::coverage::Coverage;
@@ -39,6 +40,9 @@ pub struct AppState {
     /// ATC voice audio (airband AM off the same RTL-SDR hardware) — see
     /// `atc.rs` for how it shares/hands off a dongle with `rtlsdr` above.
     pub atc: Arc<AtcListener>,
+    /// ACARS message decoding — see `acars/mod.rs`; shares a dongle with
+    /// `rtlsdr`/`atc` the same way `atc` does.
+    pub acars: Arc<AcarsListener>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,
