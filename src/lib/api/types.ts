@@ -465,6 +465,14 @@ export interface AcarsStatus {
   lastError: string | null;
 }
 
+export interface GhostContact {
+  possibleSquawk: string;
+  possibleAltitudeFt: number | null;
+  firstSeenMs: number;
+  lastSeenMs: number;
+  replies: number;
+}
+
 export interface UatStatus {
   enabled: boolean;
   deviceOpen: boolean;

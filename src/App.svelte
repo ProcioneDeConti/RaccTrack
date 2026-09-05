@@ -12,6 +12,7 @@
   import EventsPanel from "./lib/history/EventsPanel.svelte";
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import AcarsPanel from "./lib/acars/AcarsPanel.svelte";
+  import ModeAcPanel from "./lib/modeac/ModeAcPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import AboutPanel from "./lib/about/AboutPanel.svelte";
   import DisclaimerModal from "./lib/about/DisclaimerModal.svelte";
@@ -66,6 +67,7 @@
     | "events"
     | "logbook"
     | "acars"
+    | "modeac"
     | "settings"
     | "about";
 
@@ -215,6 +217,8 @@
       <LogbookPanel onClose={close} />
     {:else if panel === "acars"}
       <AcarsPanel onClose={close} />
+    {:else if panel === "modeac"}
+      <ModeAcPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
     {:else if panel === "about"}

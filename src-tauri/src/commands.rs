@@ -168,6 +168,14 @@ pub fn rtlsdr_status(state: State<AppState>) -> crate::ingest::rtlsdr::RtlSdrSta
     state.rtlsdr.status()
 }
 
+/// Legacy ATCRBS Mode A/C "ghost" contacts — see `ingest::rtlsdr::GhostContact`
+/// for why these have no hex/position and are surfaced separately from the
+/// main aircraft list.
+#[tauri::command]
+pub fn mode_ac_contacts(state: State<AppState>) -> Vec<crate::ingest::rtlsdr::GhostContact> {
+    state.rtlsdr.mode_ac_contacts()
+}
+
 /// Tune the RTL-SDR to a VHF airband frequency and start playing the
 /// AM-demodulated audio — see `atc.rs` for the single-dongle handoff with
 /// ADS-B decoding this does when they'd otherwise contend for one device.

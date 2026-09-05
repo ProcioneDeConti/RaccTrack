@@ -254,6 +254,7 @@ pub fn run() {
             commands::acars_messages,
             commands::acars_clear_messages,
             commands::uat_status,
+            commands::mode_ac_contacts,
             commands::fix_usb_driver,
             commands::compute_coverage,
             commands::coverage_progress,

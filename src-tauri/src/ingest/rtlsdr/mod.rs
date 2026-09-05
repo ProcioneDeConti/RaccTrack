@@ -9,8 +9,17 @@
 //! fit the async poll-on-demand shape the other sources use) that owns the
 //! dongle for as long as `AppSettings.rtlsdr_enabled` stays on, publishing
 //! decoded aircraft into a shared map that `snapshot()` just reads.
+//!
+//! Also runs `mode_ac` (legacy ATCRBS Mode A/C) over the exact same
+//! magnitude stream, independently of the Mode S scan above — a different
+//! pulse pattern entirely, just happening to share the same 1090MHz/2Msps
+//! capture. Its "contacts" can't become `RawAircraft`s at all (no ICAO
+//! hex, no position — see `mode_ac`'s module doc), so they're tracked in
+//! their own map and surfaced through `mode_ac_contacts()`/its own command,
+//! not the `AircraftSource` trait.
 
 pub mod demod;
+pub mod mode_ac;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -157,9 +166,26 @@ pub struct RtlSdrStatus {
     pub last_error: Option<String>,
 }
 
+/// A legacy ATCRBS Mode A/C reply, deduped by its raw code — see
+/// `mode_ac`'s module doc for why this can't carry a hex or position.
+/// `possible_squawk`/`possible_altitude_ft` are both always offered: a
+/// passive receiver can't tell which interrogation (Mode A vs Mode C)
+/// actually produced a given reply, only that `possible_altitude_ft` is
+/// `None` when the bits aren't even structurally valid as an altitude.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GhostContact {
+    pub possible_squawk: String,
+    pub possible_altitude_ft: Option<f64>,
+    pub first_seen_ms: i64,
+    pub last_seen_ms: i64,
+    pub replies: u32,
+}
+
 pub struct RtlSdrSource {
     settings: Arc<Mutex<AppSettings>>,
     tracks: Arc<Mutex<HashMap<String, Track>>>,
+    mode_ac: Arc<Mutex<HashMap<u16, GhostContact>>>,
     running: Arc<AtomicBool>,
     started: Arc<AtomicBool>,
     last_error: Arc<Mutex<Option<String>>>,
@@ -175,6 +201,7 @@ impl RtlSdrSource {
         Self {
             settings,
             tracks: Arc::new(Mutex::new(HashMap::new())),
+            mode_ac: Arc::new(Mutex::new(HashMap::new())),
             running: Arc::new(AtomicBool::new(false)),
             started: Arc::new(AtomicBool::new(false)),
             last_error: Arc::new(Mutex::new(None)),
@@ -201,6 +228,7 @@ impl RtlSdrSource {
             spawn_worker(
                 self.settings.clone(),
                 self.tracks.clone(),
+                self.mode_ac.clone(),
                 self.running.clone(),
                 self.started.clone(),
                 self.last_error.clone(),
@@ -224,6 +252,17 @@ impl RtlSdrSource {
             aircraft_tracked: self.tracks.lock().len(),
             last_error: self.last_error.lock().clone(),
         }
+    }
+
+    /// Currently-active ghost contacts (aged out after `STALE_MS` without a
+    /// repeat), most-recently-seen first.
+    pub fn mode_ac_contacts(&self) -> Vec<GhostContact> {
+        let now = now_ms();
+        let mut m = self.mode_ac.lock();
+        m.retain(|_, c| now - c.last_seen_ms < STALE_MS);
+        let mut out: Vec<GhostContact> = m.values().cloned().collect();
+        out.sort_by(|a, b| b.last_seen_ms.cmp(&a.last_seen_ms));
+        out
     }
 }
 
@@ -257,6 +296,7 @@ impl AircraftSource for RtlSdrSource {
 fn spawn_worker(
     settings: Arc<Mutex<AppSettings>>,
     tracks: Arc<Mutex<HashMap<String, Track>>>,
+    mode_ac: Arc<Mutex<HashMap<u16, GhostContact>>>,
     running: Arc<AtomicBool>,
     started: Arc<AtomicBool>,
     last_error: Arc<Mutex<Option<String>>>,
@@ -270,6 +310,7 @@ fn spawn_worker(
         run_worker(
             &settings,
             &tracks,
+            &mode_ac,
             &running,
             &last_error,
             &device_open,
@@ -289,6 +330,7 @@ fn spawn_worker(
 fn run_worker(
     settings: &Arc<Mutex<AppSettings>>,
     tracks: &Arc<Mutex<HashMap<String, Track>>>,
+    mode_ac_contacts: &Arc<Mutex<HashMap<u16, GhostContact>>>,
     running: &Arc<AtomicBool>,
     last_error: &Arc<Mutex<Option<String>>>,
     device_open: &Arc<AtomicBool>,
@@ -363,6 +405,34 @@ fn run_worker(
                 }
             }
         }
+
+        // Independent second pass over the same magnitude samples for
+        // legacy Mode A/C — its own "consumed" count is irrelevant here
+        // (buffer draining is driven entirely by the Mode S scan above);
+        // any overlap between the two passes on the next chunk just means
+        // `mode_ac::scan` might re-see a reply it already found, which
+        // dedup-by-code below handles for free (refreshes `last_seen_ms`
+        // instead of double-counting).
+        let (ghosts, _) = mode_ac::scan(&tail);
+        if !ghosts.is_empty() {
+            let now = now_ms();
+            let mut m = mode_ac_contacts.lock();
+            for g in ghosts {
+                m.entry(g.code)
+                    .and_modify(|c| {
+                        c.last_seen_ms = now;
+                        c.replies += 1;
+                    })
+                    .or_insert_with(|| GhostContact {
+                        possible_squawk: mode_ac::squawk_string(g.code),
+                        possible_altitude_ft: mode_ac::altitude_ft(g.code),
+                        first_seen_ms: now,
+                        last_seen_ms: now,
+                        replies: 1,
+                    });
+            }
+        }
+
         // Keep a preamble+long-message-worth of trailing samples in case a
         // message starts right at the end of this chunk.
         let keep_from = consumed.min(tail.len());

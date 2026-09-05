@@ -13,6 +13,7 @@ import type {
   AcarsStatus,
   AcarsMessage,
   UatStatus,
+  GhostContact,
   CoverageResult,
   CoverageProgress,
   Sighting,
@@ -150,6 +151,10 @@ export function acarsClearMessages(): Promise<void> {
 
 export function uatStatus(): Promise<UatStatus> {
   return invoke("uat_status");
+}
+
+export function modeAcContacts(): Promise<GhostContact[]> {
+  return invoke("mode_ac_contacts");
 }
 
 export function computeCoverage(): Promise<CoverageResult> {
