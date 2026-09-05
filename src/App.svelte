@@ -33,6 +33,7 @@
     disclaimerOpen,
     coverageEnabled,
     coverageResult,
+    atcStatus,
   } from "./lib/state";
   import {
     onDiff,
@@ -43,6 +44,7 @@
     getSourceStatus,
     getSettings,
     computeCoverage,
+    getAtcStatus,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { horizonOpen } from "./lib/horizon";
@@ -100,7 +102,17 @@
         units.set(s.units);
         pinned.set(s.pinned ?? []);
         places.set(s.places ?? []);
-        mapColors.set(s.colors ?? { airspace: {}, geofenceFill: null, geofenceLine: null });
+        mapColors.set(
+          s.colors ?? {
+            airspace: {},
+            geofenceFill: null,
+            geofenceLine: null,
+            geofencePattern: null,
+            coverageFill: null,
+            coverageLine: null,
+            coveragePattern: null,
+          },
+        );
         uiTheme.set(s.uiTheme ?? "auto");
         if (!s.disclaimerAcknowledged) {
           disclaimerFirstLaunch = true;
@@ -134,8 +146,18 @@
       await refreshWatch();
     })();
 
+    // Polled (not event-pushed, matching RtlSdrStatus/CoverageProgress
+    // elsewhere) since it's just reflecting worker-thread state, not
+    // something latency-sensitive enough to need a push channel.
+    const pollAtc = () => {
+      void getAtcStatus().then((s) => atcStatus.set(s));
+    };
+    pollAtc();
+    const atcTimer = window.setInterval(pollAtc, 1000);
+
     return () => {
       unlisteners.forEach((p) => p.then((u) => u()));
+      clearInterval(atcTimer);
     };
   });
 

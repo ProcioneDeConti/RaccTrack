@@ -15,10 +15,11 @@
     rtlsdrStatus,
     fixUsbDriver,
     computeCoverage,
+    coverageProgress,
     type TileCacheStats,
     type DownloadProgress,
   } from "../api/backend";
-  import type { AppSettings, RtlSdrStatus } from "../api/types";
+  import type { AppSettings, RtlSdrStatus, CoverageProgress } from "../api/types";
   import { units } from "../format";
   import { basemap, uiTheme, coverageResult, coverageEnabled } from "../state";
   import { BASEMAP_THEMES } from "../map/style";
@@ -51,9 +52,23 @@
     };
     pollRtlStatus();
     rtlStatusTimer = window.setInterval(pollRtlStatus, 2000);
+
+    // Resume watching an already-in-flight coverage compute — the backend
+    // command isn't tied to this panel's lifecycle, so closing and
+    // reopening Settings mid-compute shouldn't lose track of it (or worse,
+    // let "Recompute coverage" fire a second, wasteful, rate-limit-risking
+    // compute on top of the one still running).
+    void coverageProgress().then((p) => {
+      if (!p.running) return;
+      coverageComputing = true;
+      covProgress = p;
+      covProgressTimer = window.setInterval(pollCovProgress, 1500);
+    });
+
     return () => {
       unlisten?.();
       clearInterval(rtlStatusTimer);
+      clearInterval(covProgressTimer);
     };
   });
 
@@ -178,16 +193,61 @@
 
   let coverageComputing = false;
   let coverageError: string | null = null;
+  let covProgress: CoverageProgress | null = null;
+  let covProgressTimer: number | undefined;
+
+  /** Shared by `doComputeCoverage` and the on-mount resume check below —
+   *  named (not an inline closure) so both can point the same interval at
+   *  it. Also the thing that notices a resumed compute has finished:
+   *  `running` flips false backend-side as soon as `compute_uncached`
+   *  returns, so this is a reliable "done" signal regardless of which panel
+   *  instance (if any) is still around to see the original `computeCoverage()`
+   *  promise resolve. */
+  function pollCovProgress() {
+    void coverageProgress().then((p) => {
+      covProgress = p;
+      if (!p.running) {
+        coverageComputing = false;
+        covProgress = null;
+        clearInterval(covProgressTimer);
+      }
+    });
+  }
+
   async function doComputeCoverage() {
     coverageComputing = true;
     coverageError = null;
+    covProgress = null;
+    pollCovProgress();
+    covProgressTimer = window.setInterval(pollCovProgress, 1500);
     try {
       coverageResult.set(await computeCoverage());
     } catch (e) {
       coverageError = humanizeError(e);
     } finally {
       coverageComputing = false;
+      clearInterval(covProgressTimer);
+      covProgress = null;
     }
+  }
+
+  /** "7/19 batches · ~45s left" from observed pace so far — self-adjusting
+   *  if a batch gets rate-limited and backs off, rather than assuming a
+   *  fixed per-batch time that would drift out of sync with the backend. */
+  function covPct(p: CoverageProgress): number {
+    return p.batchesTotal > 0 ? Math.round((100 * p.batchesDone) / p.batchesTotal) : 0;
+  }
+
+  function covEta(p: CoverageProgress): string {
+    const pct = covPct(p);
+    const elapsedS = (Date.now() - p.startedAtMs) / 1000;
+    if (p.batchesDone === 0 || elapsedS <= 0) {
+      return `${p.batchesDone}/${p.batchesTotal} batches (${pct}%)`;
+    }
+    const remaining = Math.round((elapsedS / p.batchesDone) * (p.batchesTotal - p.batchesDone));
+    const remainingStr =
+      remaining >= 60 ? `~${Math.ceil(remaining / 60)} min left` : `~${remaining}s left`;
+    return `${p.batchesDone}/${p.batchesTotal} batches (${pct}%) · ${remainingStr}`;
   }
 </script>
 
@@ -283,8 +343,9 @@
                 class:bad={!rtlStatus.deviceOpen && !!rtlStatus.lastError}
               >
                 {#if rtlStatus.deviceOpen}
-                  Open — {rtlStatus.messagesDecoded.toLocaleString()} messages, {rtlStatus.aircraftTracked}
-                  aircraft
+                  Open — {rtlStatus.messagesDecoded.toLocaleString()} messages, {rtlStatus.aircraftTracked} aircraft
+                  ({rtlStatus.rawCandidates.toLocaleString()} candidates → {rtlStatus.framesParsed.toLocaleString()}
+                  parsed → {rtlStatus.adsbFrames.toLocaleString()} ES)
                 {:else if rtlStatus.lastError}
                   {humanizeError(rtlStatus.lastError)}
                 {:else}
@@ -313,6 +374,25 @@
                 {/each}
               </select>
             </label>
+            {#if rtlDevices.length > 1}
+              <label class="row">
+                ATC audio device
+                <select
+                  value={s.atcDeviceIndex}
+                  on:change={(e) => patch({ atcDeviceIndex: +e.currentTarget.value })}
+                >
+                  {#each rtlDevices as d, i}
+                    <option value={i}>{d}</option>
+                  {/each}
+                </select>
+              </label>
+              <p class="muted">
+                Which dongle "Listen" (on an airport's frequency list) uses.
+                Pick a different one than above to run ADS-B and ATC audio
+                at the same time; picking the same one pauses ADS-B decoding
+                for as long as you're listening.
+              </p>
+            {/if}
           {/if}
           <label class="row">
             Gain
@@ -401,6 +481,12 @@
                 </span>
               {/if}
             </div>
+            {#if coverageComputing && covProgress}
+              <div class="cov-progress">
+                <div class="cov-bar"><div class="cov-fill" style="width:{covPct(covProgress)}%"></div></div>
+                <span class="muted">{covEta(covProgress)}</span>
+              </div>
+            {/if}
             {#if coverageError}
               <p class="rx bad">{coverageError}</p>
             {/if}
@@ -409,7 +495,9 @@
               in Places &amp; alerts, for the altitude above — not a plain
               circle. Approximate; doesn't yet account for buildings or tree
               cover. Recompute after moving the antenna, changing its height,
-              or picking a different altitude.
+              or picking a different altitude. Deliberately paced to avoid
+              the elevation data source's rate limit, so a compute takes a
+              couple of minutes.
             </p>
           {/if}
         {/if}
@@ -631,6 +719,22 @@
   }
   .rx.bad {
     color: var(--emergency);
+  }
+  .cov-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .cov-bar {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--bg-elev);
+    overflow: hidden;
+  }
+  .cov-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease-out;
   }
   .stack {
     display: flex;

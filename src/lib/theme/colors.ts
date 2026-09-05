@@ -59,6 +59,11 @@ export const AIRSPACE_FALLBACK = "#64748b";
 export const GEOFENCE_LINE_DEFAULT = "#f0a020";
 export const GEOFENCE_FILL_DEFAULT = "#f0a020";
 
+/** Default outline/fill colour for the RTL-SDR reception coverage polygon —
+ *  user-overridable, see `AppSettings.colors`. */
+export const COVERAGE_LINE_DEFAULT = "#22d3ee";
+export const COVERAGE_FILL_DEFAULT = "#22d3ee";
+
 /** "#rrggbb" -> 0–1 RGBA, for feeding WebGL uniforms. */
 export function hexToRgba01(hex: string, alpha: number): [number, number, number, number] {
   const h = hex.replace("#", "");

@@ -137,6 +137,22 @@ pub struct RtlSdrStatus {
     pub enabled: bool,
     pub device_open: bool,
     pub messages_decoded: u64,
+    /// Preamble-shaped candidates found before CRC validation — a temporary
+    /// diagnostic. If this stays near zero, the antenna/gain/RF chain isn't
+    /// getting signal at all; if it's high but `messages_decoded` isn't,
+    /// see `frames_parsed`/`adsb_frames` to narrow down where they're lost.
+    pub raw_candidates: u64,
+    /// Of `raw_candidates`, how many were even structurally valid Mode S
+    /// (right length, `adsb_deku` could parse a DF out of them) — temporary
+    /// diagnostic. Low relative to `raw_candidates` means most "candidates"
+    /// are noise the preamble detector is too loose about, not real bursts.
+    pub frames_parsed: u64,
+    /// Of `frames_parsed`, how many were DF17/18 (ADS-B) rather than some
+    /// other Mode S downlink format (radar interrogation replies etc., which
+    /// are real and common but never become `messages_decoded`) — temporary
+    /// diagnostic. Non-zero here but `messages_decoded` still zero means
+    /// real ES squitters are arriving but failing CRC — a demod/CRC bug.
+    pub adsb_frames: u64,
     pub aircraft_tracked: usize,
     pub last_error: Option<String>,
 }
@@ -149,6 +165,9 @@ pub struct RtlSdrSource {
     last_error: Arc<Mutex<Option<String>>>,
     device_open: Arc<AtomicBool>,
     messages_decoded: Arc<AtomicU64>,
+    raw_candidates: Arc<AtomicU64>,
+    frames_parsed: Arc<AtomicU64>,
+    adsb_frames: Arc<AtomicU64>,
 }
 
 impl RtlSdrSource {
@@ -161,6 +180,9 @@ impl RtlSdrSource {
             last_error: Arc::new(Mutex::new(None)),
             device_open: Arc::new(AtomicBool::new(false)),
             messages_decoded: Arc::new(AtomicU64::new(0)),
+            raw_candidates: Arc::new(AtomicU64::new(0)),
+            frames_parsed: Arc::new(AtomicU64::new(0)),
+            adsb_frames: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -184,6 +206,9 @@ impl RtlSdrSource {
                 self.last_error.clone(),
                 self.device_open.clone(),
                 self.messages_decoded.clone(),
+                self.raw_candidates.clone(),
+                self.frames_parsed.clone(),
+                self.adsb_frames.clone(),
             );
         }
     }
@@ -193,6 +218,9 @@ impl RtlSdrSource {
             enabled: self.settings.lock().rtlsdr_enabled,
             device_open: self.device_open.load(Ordering::SeqCst),
             messages_decoded: self.messages_decoded.load(Ordering::SeqCst),
+            raw_candidates: self.raw_candidates.load(Ordering::SeqCst),
+            frames_parsed: self.frames_parsed.load(Ordering::SeqCst),
+            adsb_frames: self.adsb_frames.load(Ordering::SeqCst),
             aircraft_tracked: self.tracks.lock().len(),
             last_error: self.last_error.lock().clone(),
         }
@@ -234,9 +262,22 @@ fn spawn_worker(
     last_error: Arc<Mutex<Option<String>>>,
     device_open: Arc<AtomicBool>,
     messages_decoded: Arc<AtomicU64>,
+    raw_candidates: Arc<AtomicU64>,
+    frames_parsed: Arc<AtomicU64>,
+    adsb_frames: Arc<AtomicU64>,
 ) {
     std::thread::spawn(move || {
-        run_worker(&settings, &tracks, &running, &last_error, &device_open, &messages_decoded);
+        run_worker(
+            &settings,
+            &tracks,
+            &running,
+            &last_error,
+            &device_open,
+            &messages_decoded,
+            &raw_candidates,
+            &frames_parsed,
+            &adsb_frames,
+        );
         running.store(false, Ordering::SeqCst);
         device_open.store(false, Ordering::SeqCst);
         started.store(false, Ordering::SeqCst);
@@ -252,6 +293,9 @@ fn run_worker(
     last_error: &Arc<Mutex<Option<String>>>,
     device_open: &Arc<AtomicBool>,
     messages_decoded: &Arc<AtomicU64>,
+    raw_candidates: &Arc<AtomicU64>,
+    frames_parsed: &Arc<AtomicU64>,
+    adsb_frames: &Arc<AtomicU64>,
 ) {
     let (device_index, gain_tenths_db) = {
         let s = settings.lock();
@@ -304,10 +348,15 @@ fn run_worker(
 
         let (candidates, consumed) = demod::demod(&tail);
         if !candidates.is_empty() {
+            raw_candidates.fetch_add(candidates.len() as u64, Ordering::Relaxed);
             let now = now_ms();
             let mut t = tracks.lock();
             for c in candidates {
                 if let Ok(frame) = Frame::from_bytes(&c.bytes) {
+                    frames_parsed.fetch_add(1, Ordering::Relaxed);
+                    if matches!(&frame.df, DF::ADSB(_)) {
+                        adsb_frames.fetch_add(1, Ordering::Relaxed);
+                    }
                     if apply_frame(&mut t, frame, now) {
                         messages_decoded.fetch_add(1, Ordering::Relaxed);
                     }
@@ -332,15 +381,21 @@ fn run_worker(
 /// counter so it means something.
 fn apply_frame(tracks: &mut HashMap<String, Track>, frame: Frame, now: i64) -> bool {
     let DF::ADSB(adsb) = frame.df else { return false };
-    let icao = adsb.icao.0;
-    let icao_val = u32::from_be_bytes([0, icao[0], icao[1], icao[2]]);
-    // For DF17/18, a valid message's CRC remainder equals its own ICAO
-    // address (the AA field is folded into the trailing "parity" bits) —
-    // adsb_deku computes that remainder for us as `frame.crc`. A mismatch
-    // means our demod locked onto noise, not a real message.
-    if frame.crc != icao_val {
+    // Unlike overlay-format DFs (DF0/4/5/11/16/20/21/24), where the ICAO
+    // address is recovered by XOR-ing the parity field with a CRC computed
+    // over the data — and where adsb_deku's `frame.crc` *is* that recovered
+    // address — DF17/18 carry the ICAO explicitly in the AA field, and the
+    // trailing parity is a plain CRC-24 remainder over the whole message.
+    // adsb_deku computes that remainder as `frame.crc` too, but for this DF
+    // it's valid iff the remainder is zero, not iff it equals the ICAO.
+    // (Comparing it to the ICAO here — the previous version of this check —
+    // meant every genuine DF17/18 message was rejected as noise, since a
+    // real message's `crc` is 0, never the aircraft's address.)
+    if frame.crc != 0 {
         return false;
     }
+    let icao = adsb.icao.0;
+    let icao_val = u32::from_be_bytes([0, icao[0], icao[1], icao[2]]);
     let hex = format!("{icao_val:06x}");
     let t = tracks
         .entry(hex.clone())

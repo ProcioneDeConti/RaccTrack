@@ -18,13 +18,9 @@
     resolveStyleUrl,
     themeFor,
   } from "./style";
-  import {
-    registerAircraftIcons,
-    registerChipIcon,
-    registerRtlsdrBadge,
-    CHIP_PILL_ID,
-    RTLSDR_BADGE_ID,
-  } from "./icons";
+  import { registerAircraftIcons } from "./icons";
+  import { MapboxOverlay } from "@deck.gl/mapbox";
+  import { buildChipLayers, PLANE_LAYER_ID } from "./aircraftChips";
   import Icon from "../ui/Icon.svelte";
   import { addCoverageBoundary } from "./coverage";
   import { latestRadar } from "./radar";
@@ -92,6 +88,7 @@
   let activeBasemap = "";
   let themeApplied = "";
   let overlays: Overlays | undefined;
+  let deckOverlay: MapboxOverlay | undefined;
   let overlayTimer: number | undefined;
   let styleSettleTimer: number | undefined;
   let unsubLayers: (() => void) | undefined;
@@ -107,11 +104,20 @@
     radar: false,
     airspace: false,
     rangeRings: false,
+    aircraft: true,
   };
 
   const EMPTY_FC = { type: "FeatureCollection", features: [] } as const;
 
   const preventNativeMenu = (e: Event) => e.preventDefault();
+  // Blocks the browser's native HTML5 drag-and-drop gesture (distinct from
+  // MapLibre's own pointer-based panning) from ever starting on the map —
+  // without a `dragover` handler accepting it, that gesture shows a
+  // "no-drop" cursor and eats all further pointer movement until release,
+  // which is exactly the "drag a few px, then a no-drop icon and panning
+  // stops" symptom. `dragstart` is the event that kicks that gesture off,
+  // so preventing it here stops it before it can interrupt an actual pan.
+  const preventNativeDrag = (e: Event) => e.preventDefault();
 
   function pushViewport() {
     if (!map) return;
@@ -153,6 +159,105 @@
     } else {
       src.setData(EMPTY_FC as any);
     }
+  }
+
+  /** Theme-derived colors the chip/badge/leader deck.gl layers need —
+   *  factored out so both `doInstallLayers`'s theme-refresh block and
+   *  `updateChipLayers` compute the same values from the same basemap. */
+  function chipTheme() {
+    const dark = themeFor(activeBasemap).dark;
+    return {
+      dark,
+      lab: dark ? LABEL.dark : LABEL.light,
+      // A step lighter than the near-black/white halo colors, matching the
+      // app's own "elevated surface" panel tokens (--bg-elev / --border in
+      // app.css; map layers can't read CSS vars). The chip's own border is
+      // a fixed charcoal regardless of theme now (see `CHIP_BORDER_RGB` in
+      // aircraftChips.ts), not derived here.
+      chipBg: dark ? "#1c232d" : "#e9edf1",
+    };
+  }
+
+  /** Rebuild the deck.gl overlay's layers — the chip pill/text, its RTL-SDR
+   *  badge, and the leader line to the plane (see `aircraftChips.ts`). Needs
+   *  re-running on every data update (aircraft moved / new data) *and* every
+   *  camera move (the chip sits at a fixed screen-pixel offset, and its own
+   *  decluttering is computed in screen space — see `computeVisible` there). */
+  function updateChipLayers() {
+    if (!map || !deckOverlay) return;
+    // The leader line's `beforeId` (see aircraftChips.ts) anchors it just
+    // before the plane layer in the combined MapLibre+deck.gl stack —
+    // MapLibre throws if that target doesn't exist yet, which happens for
+    // a moment after a basemap swap wipes every custom layer and before
+    // `ensureLayers()` has re-added "aircraft-symbol". This can fire in
+    // that gap (e.g. the `aircraftGeoJson` poll subscription, independent
+    // of the style-load lifecycle), so skip rather than throw — the next
+    // call (data update, camera move, or `ensureLayers` itself once the
+    // style settles) picks it back up.
+    if (!map.getLayer(PLANE_LAYER_ID)) return;
+    try {
+      const { dark, lab, chipBg } = chipTheme();
+      deckOverlay.setProps({
+        layers: buildChipLayers({
+          // The "Aircraft" layer toggle hides the plane icons (see
+          // `setAircraftVisibility`) — an empty array here is the deck.gl
+          // side of that same toggle, so the chip complex disappears with
+          // them instead of floating with nothing to point at.
+          features: curLayers.aircraft ? get(aircraftGeoJson).features : [],
+          map,
+          dark,
+          chipBg,
+          textColor: lab.text,
+        }),
+      });
+    } catch (e) {
+      // Runs off a "move"/"zoom" listener (via scheduleChipUpdate) — an
+      // uncaught throw there is a worse failure mode than a stale chip
+      // frame, since it happens mid-gesture on MapLibre's own event path.
+      console.error("[diag] updateChipLayers failed:", (e as Error)?.stack ?? e);
+    }
+  }
+
+  /** The "Aircraft" map-layer toggle — unlike the other overlays (airports,
+   *  weather, ...) this hides the plane icons/shadow/selection halo/hover
+   *  ring/trail/route themselves, not a reference layer drawn alongside
+   *  them, so useful for e.g. inspecting the reception coverage polygon
+   *  without aircraft cluttering it. `updateChipLayers` (see above) is the
+   *  deck.gl-side half of this same toggle. */
+  function setAircraftVisibility(visible: boolean) {
+    if (!map) return;
+    const vis = visible ? "visible" : "none";
+    for (const id of [
+      "aircraft-shadow",
+      "aircraft-symbol",
+      "aircraft-halo",
+      "hover-ring",
+      "trail-line",
+      "route-flown",
+    ]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", vis);
+    }
+    updateChipLayers();
+  }
+
+  /** Camera moves fire continuously for the whole duration of a drag/zoom
+   *  gesture — an earlier version of this coalesced to once per *animation
+   *  frame* (via requestAnimationFrame), which sounds cheap but wasn't:
+   *  every call rebuilds the declutter set (a `measureText` + `map.project`
+   *  per aircraft) into brand-new array references, and deck.gl treats a
+   *  changed `data` reference as "fully re-diff and re-upload," so a drag
+   *  was re-running that whole pass and re-uploading every layer's GPU
+   *  buffers up to 60 times a second — the freezing this was fixing.
+   *  Decluttering doesn't need to be that fresh; a several-frame lag during
+   *  an active drag is imperceptible, so a plain time-based throttle (not
+   *  tied to the render loop at all) is both simpler and far cheaper. */
+  let chipUpdateTimer: number | undefined;
+  function scheduleChipUpdate() {
+    if (chipUpdateTimer) return;
+    chipUpdateTimer = window.setTimeout(() => {
+      chipUpdateTimer = undefined;
+      updateChipLayers();
+    }, 200);
   }
 
   function scheduleViewport() {
@@ -247,42 +352,6 @@
     }
   }
 
-  /** First font stack the active basemap ships, so aircraft labels always render. */
-  function styleFont(): string[] {
-    try {
-      for (const l of map!.getStyle().layers ?? []) {
-        const f = (l as any).layout?.["text-font"];
-        if (Array.isArray(f) && f.length) return f;
-      }
-    } catch {
-      /* style not ready */
-    }
-    return ["Open Sans Regular", "Noto Sans Regular"];
-  }
-
-  /** The info-chip's two-line text-field — altitude's color property flips
-   *  between the icon-fill palette (dark chip bg) and a darkened variant
-   *  legible as plain text on a light chip bg (see `altColorOnLight`). Needs
-   *  rebuilding (not just a paint-property tweak) since the color choice is
-   *  baked into this layout expression. */
-  function chipTextField(dark: boolean): any {
-    const altColorProp = dark ? "color" : "altTextColorOnLight";
-    return [
-      "case",
-      ["==", ["get", "altLabel"], ""],
-      ["format", ["get", "callsign"], {}],
-      [
-        "format",
-        ["get", "callsign"],
-        {},
-        "\n",
-        {},
-        ["get", "altLabel"],
-        { "text-color": ["get", altColorProp] },
-      ],
-    ];
-  }
-
   // (Re)create the app's sources / layers / images. Idempotent — safe to call
   // on `load`, `style.load` and `styledata`, and again after a basemap swap
   // wipes everything the app added.
@@ -303,16 +372,12 @@
       map.getLayer("ov-airport-dot") &&
       map.getLayer("coverage-bounds-line") &&
       map.hasImage("ac-jet") &&
-      map.hasImage(CHIP_PILL_ID) &&
-      map.hasImage(RTLSDR_BADGE_ID) &&
       themeApplied === activeBasemap
     ) {
       return;
     }
 
     registerAircraftIcons(map);
-    registerChipIcon(map);
-    registerRtlsdrBadge(map);
 
     if (!map.getSource("aircraft")) {
       map.addSource("aircraft", {
@@ -345,13 +410,7 @@
       console.error("[diag] overlays install failed:", (e as Error)?.message ?? e);
     }
 
-    const dark = themeFor(activeBasemap).dark;
-    const lab = dark ? LABEL.dark : LABEL.light;
-    // Chip fill/border — a step lighter than the near-black/white halo colors
-    // above, matching the app's own "elevated surface" panel tokens
-    // (--bg-elev / --border in app.css; map layers can't read CSS vars).
-    const chipBg = dark ? "#1c232d" : "#e9edf1";
-    const chipBorder = dark ? "#39424e" : "#c3cad3";
+    const { lab } = chipTheme();
     const iconSize: any = [
       "interpolate",
       ["linear"],
@@ -473,77 +532,16 @@
       });
     }
 
-    // Callsign + altitude render together in one solid-background "chip" to
-    // the right of the plane, callsign on top and altitude on its own line
-    // below: a fixed-size pill icon with its text centered on top, both
-    // offset from the plane's anchor by the same amount (in their own units —
-    // icon-offset is raw px, text-offset is ems of the layer's text-size) so
-    // the two sit exactly on top of each other, clear of the icon.
-    // Collision-managed (not allow-overlap) so two overlapping chips don't
-    // paint over each other unreadably — `symbol-sort-key` (altitude) makes
-    // the winner deterministic per pair (the higher aircraft's chip wins,
-    // matching the plane icons' own stacking), which is also what fixed an
-    // earlier flicker bug: with no stable sort key, collision outcomes for
-    // borderline-overlapping chips could flip between successive ~3s poll
-    // refreshes as aircraft nudged position; a stable key makes the same
-    // pair resolve the same way every time. Altitude is colored to match the
-    // aircraft's own altitude-band tint via a `format` expression
-    // section-color override; callsign uses the plain theme text color.
-    // Plane icons here render up to ~35px in radius (a zoomed-in heavy
-    // aircraft) — the offset to the right clears that with room to spare.
-    if (!map.getLayer("aircraft-info-chip")) {
-      map.addLayer({
-        id: "aircraft-info-chip",
-        type: "symbol",
-        source: "aircraft",
-        minzoom: 6,
-        layout: {
-          "icon-image": CHIP_PILL_ID,
-          "icon-offset": [36, 0],
-          "symbol-sort-key": altitudeSortKey,
-          "text-field": chipTextField(dark),
-          "text-font": styleFont(),
-          "text-size": 10,
-          "text-offset": [3.6, 0],
-          "text-anchor": "center",
-        },
-        paint: {
-          "icon-color": chipBg,
-          "icon-halo-color": chipBorder,
-          "icon-halo-width": 2.2,
-          "text-color": lab.text,
-        },
-      });
-    }
-
-    // Small WiFi-style badge at the chip's top-right corner marking an
-    // aircraft heard straight off the user's own RTL-SDR dongle. A separate
-    // solo icon layer (no text, no compositing with the pill) rather than
-    // trying to bake it into the chip itself — after two rounds of grief
-    // getting the chip's own icon+text combo right, adding a second
-    // independent element to that same layer wasn't worth the risk when a
-    // lone icon (exactly how the plane icons already work) is this simple.
-    if (!map.getLayer("aircraft-direct-badge")) {
-      map.addLayer({
-        id: "aircraft-direct-badge",
-        type: "symbol",
-        source: "aircraft",
-        minzoom: 6,
-        filter: ["==", ["get", "direct"], true],
-        layout: {
-          "icon-image": RTLSDR_BADGE_ID,
-          "icon-size": 0.34,
-          "icon-offset": [74, -20],
-          "icon-allow-overlap": true,
-          "icon-ignore-placement": true,
-        },
-        paint: {
-          "icon-color": ACCENT,
-          "icon-halo-color": chipBg,
-          "icon-halo-width": 1.4,
-        },
-      });
-    }
+    // The info chip (pill + callsign/altitude), its RTL-SDR badge, the
+    // leader line joining it to the plane, and its drop shadow all used to
+    // live here as four separate MapLibre symbol layers. They're now a
+    // deck.gl overlay instead (see `aircraftChips.ts`) — MapLibre's symbol
+    // collision system has no way to make independent layers share a fate,
+    // which is what caused every "badge outlived a dropped chip" /
+    // "collision-managing the badge took the chip down with it" bug in this
+    // file's git history. `updateChipLayers()` (called from the
+    // `aircraftGeoJson` subscription and the theme-refresh block below)
+    // keeps that overlay's `deckOverlay.setProps({ layers })` in sync.
 
     const freshInstall = !map.getLayer("aircraft-symbol");
     if (freshInstall) {
@@ -575,13 +573,7 @@
     if (map.getLayer("aircraft-symbol") && themeApplied !== activeBasemap) {
       themeApplied = activeBasemap;
       map.setPaintProperty("aircraft-symbol", "icon-halo-color", lab.outline);
-      map.setPaintProperty("aircraft-info-chip", "icon-color", chipBg);
-      map.setPaintProperty("aircraft-info-chip", "icon-halo-color", chipBorder);
-      map.setPaintProperty("aircraft-info-chip", "text-color", lab.text);
-      map.setPaintProperty("aircraft-direct-badge", "icon-halo-color", chipBg);
-      // The altitude line's color is baked into the text-field expression
-      // (a `format` section override), not a paint property — rebuild it.
-      map.setLayoutProperty("aircraft-info-chip", "text-field", chipTextField(dark));
+      updateChipLayers();
       // Overlay labels (airports, range rings) flip with the basemap too.
       for (const id of ["ov-airport-label", "ov-rings-label"]) {
         if (!map.getLayer(id)) continue;
@@ -740,7 +732,15 @@
     let cacheEnabled = false;
     let basemapKey = "darkMatter";
     let initialPlaces: Place[] = [];
-    let initialColors: MapColors = { airspace: {}, geofenceFill: null, geofenceLine: null };
+    let initialColors: MapColors = {
+      airspace: {},
+      geofenceFill: null,
+      geofenceLine: null,
+      geofencePattern: null,
+      coverageFill: null,
+      coverageLine: null,
+      coveragePattern: null,
+    };
     try {
       const s = await getSettings();
       cacheEnabled = s.tileCacheEnabled;
@@ -776,8 +776,33 @@
     });
     overlays = new Overlays(map);
 
+    // Renders the aircraft info chip (pill + callsign/altitude), its RTL-SDR
+    // badge, and the leader line to the plane — see `aircraftChips.ts` for
+    // why this moved off MapLibre's own symbol layers. `interleaved: true`
+    // shares MapLibre's own WebGL2 context rather than opening a second one
+    // on top of it.
+    //
+    // `getCursor` matters more than it looks: deck.gl calls it from its own
+    // render loop on *every animation frame* (not just on pointer events),
+    // unconditionally overwriting the canvas's CSS cursor with whatever it
+    // returns — default `isDragging ? 'grabbing' : 'grab'`. None of our
+    // layers are pickable, so that state never changes, meaning it was
+    // forcing the cursor back to "grab" up to 60x/second regardless of what
+    // MapLibre's own airport/aircraft hover handlers had just set a moment
+    // earlier — the reported "cursor never changes to a pointer" bug.
+    // Reading back whatever MapLibre most recently set makes deck.gl's
+    // per-frame reassignment a no-op instead of a fight, leaving MapLibre's
+    // own cursor management as the only thing that actually changes it.
+    deckOverlay = new MapboxOverlay({
+      interleaved: true,
+      layers: [],
+      getCursor: () => map?.getCanvas().style.cursor || "",
+    });
+    map.addControl(deckOverlay);
+
     // Suppress the webview's native context menu over the map so ours shows.
     container.addEventListener("contextmenu", preventNativeMenu);
+    container.addEventListener("dragstart", preventNativeDrag);
 
     map.on("error", (e) => {
       // Surfaced so a broken basemap / tile source is visible during testing.
@@ -828,6 +853,7 @@
       settleRetries = 0;
       ensureLayers();
       overlays?.setVisibility(curLayers);
+      setAircraftVisibility(curLayers.aircraft);
       overlays?.setRangeRings(
         get(primaryPlace),
         get(rangeRingsNm),
@@ -839,6 +865,7 @@
       syncSelected();
       pushViewport();
       refreshOverlays();
+      updateChipLayers();
     };
     const onStyleEvent = () => {
       ensureLayers();
@@ -855,7 +882,14 @@
       if (!src) return;
       src.setData(fc as any);
       syncSelected();
+      updateChipLayers();
     });
+    // The chip sits at a fixed screen-pixel offset from its aircraft and its
+    // own decluttering is computed in screen space (see `computeVisible` in
+    // aircraftChips.ts) — both need recomputing on every camera move, not
+    // just on data updates. `scheduleChipUpdate` coalesces to once/frame.
+    map.on("move", scheduleChipUpdate);
+    map.on("zoom", scheduleChipUpdate);
     unsubAircraft = aircraft.subscribe(() => {
       followAircraft();
       updateHoverRing();
@@ -905,6 +939,7 @@
     unsubLayers = layers.subscribe((l) => {
       curLayers = l;
       overlays?.setVisibility(l);
+      setAircraftVisibility(l.aircraft);
       drawRings();
       refreshOverlays();
       if (l.radar && !radarWasOn) void refreshRadar();
@@ -1042,7 +1077,9 @@
     if (styleSettleTimer) clearTimeout(styleSettleTimer);
     if (restoreBoundsTimer) clearTimeout(restoreBoundsTimer);
     if (ctxToastTimer) clearTimeout(ctxToastTimer);
+    if (chipUpdateTimer) clearTimeout(chipUpdateTimer);
     container?.removeEventListener("contextmenu", preventNativeMenu);
+    container?.removeEventListener("dragstart", preventNativeDrag);
     unsubGeo?.();
     unsubSel?.();
     unsubBasemap?.();

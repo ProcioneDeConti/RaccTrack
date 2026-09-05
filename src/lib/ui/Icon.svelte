@@ -35,7 +35,8 @@
     | "map-pin"
     | "plane-takeoff"
     | "pencil"
-    | "plus";
+    | "plus"
+    | "wifi";
 
   export const ICON_PATHS: Record<IconName, string[]> = {
     x: ["M18 6 6 18", "m6 6 12 12"],
@@ -117,6 +118,12 @@
     pencil: [
       "M12 20h9",
       "M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z",
+    ],
+    wifi: [
+      "M12 20h.01",
+      "M2 8.82a15 15 0 0 1 20 0",
+      "M5 12.859a10 10 0 0 1 14 0",
+      "M8.5 16.429a5 5 0 0 1 7 0",
     ],
   };
 </script>

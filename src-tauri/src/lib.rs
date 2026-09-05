@@ -1,6 +1,7 @@
 mod airspace;
 mod alerts;
 mod app;
+mod atc;
 mod charts;
 mod commands;
 mod config;
@@ -168,6 +169,7 @@ pub fn run() {
             let status = Arc::new(Mutex::new(SourceStatus::default()));
 
             let rtlsdr = Arc::new(RtlSdrSource::new(settings.clone()));
+            let atc = Arc::new(atc::AtcListener::new(settings.clone(), rtlsdr.clone()));
             let sources: Vec<Arc<dyn AircraftSource>> = vec![
                 rtlsdr.clone(),
                 Arc::new(LocalReceiverSource::new(http.clone(), settings.clone())),
@@ -179,6 +181,7 @@ pub fn run() {
                 live: live.clone(),
                 sources: sources.clone(),
                 rtlsdr: rtlsdr.clone(),
+                atc: atc.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
                 history: history.clone(),
@@ -231,8 +234,15 @@ pub fn run() {
             commands::test_local_receiver,
             commands::list_rtlsdr_devices,
             commands::rtlsdr_status,
+            commands::atc_tune,
+            commands::atc_stop,
+            commands::atc_status,
+            commands::atc_scan,
+            commands::atc_start_recording,
+            commands::atc_stop_recording,
             commands::fix_usb_driver,
             commands::compute_coverage,
+            commands::coverage_progress,
             commands::get_source_status,
             commands::log_frontend,
             commands::geocode,

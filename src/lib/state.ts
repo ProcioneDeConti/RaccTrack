@@ -1,5 +1,5 @@
 import { writable, derived, get } from "svelte/store";
-import type { Aircraft, AircraftDiff, CoverageResult, SourceStatus } from "./api/types";
+import type { Aircraft, AircraftDiff, AtcStatus, CoverageResult, SourceStatus } from "./api/types";
 import { iconKindFor, sizeMulFor } from "./map/icons";
 import { altColor, altColorOnLight, EMERGENCY } from "./theme/colors";
 import { matchesFilters, type Filters, defaultFilters } from "./filters/filters";
@@ -35,6 +35,10 @@ export const mapColors = writable<MapColors>({
   airspace: {},
   geofenceFill: null,
   geofenceLine: null,
+  geofencePattern: null,
+  coverageFill: null,
+  coverageLine: null,
+  coveragePattern: null,
 });
 
 /** Non-null while the user is hand-drawing a geofence polygon for this
@@ -50,12 +54,20 @@ export const coverageResult = writable<CoverageResult | null>(null);
 /** Live mirror of `AppSettings.coverageEnabled` — whether to show it. */
 export const coverageEnabled = writable(false);
 
+/** Polled from the backend (see App.svelte) — surfaced in StatusBar (with a
+ *  Stop button) and in AirportPanel (to highlight the active frequency and
+ *  toggle Listen -> Stop on it). */
+export const atcStatus = writable<AtcStatus | null>(null);
+
 export const layers = writable<MapLayers>({
   airports: false,
   weather: false,
   radar: false,
   airspace: false,
   rangeRings: false,
+  // Unlike the optional overlays above, aircraft are the core feature, not
+  // an opt-in layer — defaults to visible, matching the Rust-side default.
+  aircraft: true,
 });
 export const rangeRingsNm = writable<number[]>([25, 50, 100]);
 /** airport ident whose info panel is open */

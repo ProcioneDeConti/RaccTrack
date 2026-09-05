@@ -155,6 +155,11 @@
             </td>
             <td class="cs">
               {(a.flight ?? a.registration ?? a.hex).trim()}
+              {#if a.source === "rtl-sdr"}
+                <span class="direct" title="Received directly via RTL-SDR"
+                  ><Icon name="wifi" size={10} /></span
+                >
+              {/if}
               {#if a.military}<span class="mil">M</span>{/if}
               {#if a.emergency && a.emergency !== "none"}<span class="emg">!</span>{/if}
             </td>
@@ -253,6 +258,12 @@
   .mil {
     color: var(--ok);
     font-size: 9px;
+    margin-left: 3px;
+  }
+  .direct {
+    display: inline-flex;
+    vertical-align: middle;
+    color: var(--ok);
     margin-left: 3px;
   }
   .emg {

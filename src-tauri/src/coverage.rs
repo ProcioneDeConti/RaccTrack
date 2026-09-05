@@ -20,21 +20,34 @@
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::db::Db;
+use crate::util::now_ms;
 
 const TTL_MS: i64 = 30 * 24 * 3600 * 1000; // terrain doesn't move; 30 days is just cache hygiene
 // Open-Meteo's anonymous elevation endpoint enforces a per-minute request
-// cap low enough that the original 36 bearings x 20 samples (8 batched
-// requests) tripped it on a single compute. Coarser sampling keeps a whole
-// compute inside 3 requests, comfortably under that limit.
-const BEARING_COUNT: usize = 24; // every 15°
-const SAMPLES_PER_BEARING: usize = 12;
+// cap — the original 36 bearings x 20 samples (8 batched requests fired back
+// to back) tripped it on a single compute. Rather than keep resolution low
+// enough to dodge that in a handful of quick requests, we now spread far
+// more batches out with a generous gap between them (plus retry/backoff if
+// one still gets rate-limited) — slower wall-clock time for a one-shot,
+// user-triggered compute is a fine trade for a much finer polygon.
+const BEARING_COUNT: usize = 72; // every 5°
+const SAMPLES_PER_BEARING: usize = 24;
 const BATCH_SIZE: usize = 100; // Open-Meteo's per-request cap
 /// Gap between sequential elevation batches, so a multi-request compute
-/// doesn't present as one instantaneous burst to the rate limiter.
-const BATCH_GAP: std::time::Duration = std::time::Duration::from_millis(250);
+/// doesn't present as one instantaneous burst to the rate limiter. 1.5s
+/// (40/min) still got rate-limited in practice, so this is deliberately
+/// well under 10/min — slow, but the whole point is trading time for not
+/// getting throttled.
+const BATCH_GAP: std::time::Duration = std::time::Duration::from_secs(6);
+/// Extra backoff before retrying a batch that came back rate-limited —
+/// separate from (and much longer than) `BATCH_GAP`, which only paces
+/// requests that weren't rejected.
+const RATE_LIMIT_BACKOFF: std::time::Duration = std::time::Duration::from_secs(20);
+const MAX_BATCH_RETRIES: u32 = 6;
 const NM_TO_M: f64 = 1852.0;
 const FT_TO_M: f64 = 0.3048;
 const EARTH_RADIUS_M: f64 = 6_371_000.0;
@@ -63,14 +76,41 @@ pub struct CoverageResult {
     pub points: Vec<CoverageBearing>,
 }
 
+/// Live progress of an in-flight `compute()`, for the Settings panel to poll
+/// (same pattern as `RtlSdrStatus`) and render as a progress bar — a compute
+/// at the current resolution, paced to stay under the elevation API's rate
+/// limit, takes on the order of minutes, so leaving the user looking at a
+/// bare "Computing…" with no sense of progress isn't good enough.
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoverageProgress {
+    pub running: bool,
+    pub batches_done: u32,
+    pub batches_total: u32,
+    /// Epoch ms the current compute started — lets the frontend derive an
+    /// ETA from actual observed pace (`elapsed / done * remaining`) instead
+    /// of hardcoding assumptions about batch timing here that would drift
+    /// out of sync if `BATCH_GAP`/retries change.
+    pub started_at_ms: i64,
+}
+
 pub struct Coverage {
     db: Arc<Db>,
     client: reqwest::Client,
+    progress: Arc<Mutex<CoverageProgress>>,
 }
 
 impl Coverage {
     pub fn new(db: Arc<Db>, client: reqwest::Client) -> Self {
-        Self { db, client }
+        Self {
+            db,
+            client,
+            progress: Arc::new(Mutex::new(CoverageProgress::default())),
+        }
+    }
+
+    pub fn progress(&self) -> CoverageProgress {
+        *self.progress.lock()
     }
 
     pub async fn compute(
@@ -80,8 +120,11 @@ impl Coverage {
         antenna_height_ft: f64,
         target_alt_ft: u32,
     ) -> Result<CoverageResult> {
+        // "coverage2": bumped from "coverage" when the sampling fix below
+        // landed, so installs with a cached pre-fix (overestimated) polygon
+        // don't keep serving it for the rest of the 30-day TTL.
         let key = format!(
-            "coverage:{lat:.4},{lon:.4},{antenna_height_ft:.0},{target_alt_ft}"
+            "coverage2:{lat:.4},{lon:.4},{antenna_height_ft:.0},{target_alt_ft}"
         );
         if let Some(json) = self.db.kv_get(&key, TTL_MS)? {
             if let Ok(v) = serde_json::from_str(&json) {
@@ -89,9 +132,34 @@ impl Coverage {
             }
         }
 
+        // Check-and-set under one lock acquisition: the frontend already
+        // disables "Recompute" while a compute is running, but there's a
+        // narrow window right after the Settings panel reopens (resuming an
+        // already-in-flight compute started before it was closed) where
+        // that guard hasn't caught up yet. A duplicate compute wouldn't
+        // just waste work — it'd double up on an elevation API that's
+        // already sensitive to rate limiting, and both would stomp on this
+        // same `progress` state.
+        {
+            let mut p = self.progress.lock();
+            if p.running {
+                return Err(anyhow!("a coverage compute is already running"));
+            }
+            // +1 for the single-point receiver-elevation lookup ahead of the
+            // main bearing sweep (its own, separate `elevation()` call).
+            let batches_total = 1 + (BEARING_COUNT * SAMPLES_PER_BEARING).div_ceil(BATCH_SIZE);
+            *p = CoverageProgress {
+                running: true,
+                batches_done: 0,
+                batches_total: batches_total as u32,
+                started_at_ms: now_ms(),
+            };
+        }
         let result = self
             .compute_uncached(lat, lon, antenna_height_ft, target_alt_ft)
-            .await?;
+            .await;
+        self.progress.lock().running = false;
+        let result = result?;
         let _ = self.db.kv_put(&key, &serde_json::to_string(&result)?);
         Ok(result)
     }
@@ -113,9 +181,7 @@ impl Coverage {
 
         // Sample distances along every bearing, in one flat list, so we can
         // batch the elevation lookups regardless of bearing/sample layout.
-        let sample_distances: Vec<f64> = (1..=SAMPLES_PER_BEARING)
-            .map(|i| horizon_nm * i as f64 / SAMPLES_PER_BEARING as f64)
-            .collect();
+        let sample_distances = sample_distances(horizon_nm, SAMPLES_PER_BEARING);
 
         let mut sample_coords = Vec::with_capacity(BEARING_COUNT * SAMPLES_PER_BEARING);
         for b in 0..BEARING_COUNT {
@@ -166,7 +232,11 @@ impl Coverage {
     }
 
     /// Batched Open-Meteo elevation lookup, `(lat, lon)` in, meters out, same
-    /// order. Free, keyless, global (SRTM90 + ASTER30).
+    /// order. Free, keyless, global (SRTM90 + ASTER30). At the current
+    /// resolution this is dozens of batches — `BATCH_GAP` paces them to stay
+    /// under the per-minute rate limit, and any batch that still gets
+    /// rejected is retried after `RATE_LIMIT_BACKOFF` rather than failing
+    /// the whole (multi-minute) compute over one transient rejection.
     async fn elevation(&self, coords: &[(f64, f64)]) -> Result<Vec<f64>> {
         #[derive(Deserialize)]
         struct Resp {
@@ -190,17 +260,54 @@ impl Coverage {
                 lats.join(","),
                 lons.join(",")
             );
-            let body = self.client.get(&url).send().await?.text().await?;
-            let resp: Resp = serde_json::from_str(&body).map_err(|_| {
-                match serde_json::from_str::<ErrResp>(&body) {
-                    Ok(e) => anyhow!("elevation source rate limit exceeded: {}", e.reason),
-                    Err(_) => anyhow!("elevation source returned an unreadable response"),
+
+            let mut attempt = 0;
+            loop {
+                let body = self.client.get(&url).send().await?.text().await?;
+                match serde_json::from_str::<Resp>(&body) {
+                    Ok(resp) => {
+                        out.extend(resp.elevation);
+                        self.progress.lock().batches_done += 1;
+                        break;
+                    }
+                    Err(_) => {
+                        let reason = serde_json::from_str::<ErrResp>(&body)
+                            .map(|e| e.reason)
+                            .ok();
+                        attempt += 1;
+                        if attempt > MAX_BATCH_RETRIES {
+                            return Err(match reason {
+                                Some(r) => anyhow!("elevation source rate limit exceeded: {r}"),
+                                None => anyhow!("elevation source returned an unreadable response"),
+                            });
+                        }
+                        tracing::warn!(
+                            "coverage: elevation batch {i} rejected (attempt {attempt}/{MAX_BATCH_RETRIES}), backing off: {reason:?}"
+                        );
+                        tokio::time::sleep(RATE_LIMIT_BACKOFF).await;
+                    }
                 }
-            })?;
-            out.extend(resp.elevation);
+            }
         }
         Ok(out)
     }
+}
+
+/// `count` sample distances (nm) along a bearing, out to `horizon_nm`,
+/// quadratically rather than evenly spaced: a nearby obstruction (a hill a
+/// few nm away, say) blocks line-of-sight to *every* farther distance on
+/// that bearing once it sets `max_terrain_angle` in the caller's sweep, so it
+/// matters far more than a distant one — but evenly spacing samples across
+/// the whole horizon (which can be 100-300nm) put the first sample tens of
+/// nm out, so anything closer than that was structurally invisible and every
+/// bearing degraded to just the smooth-earth horizon regardless of real
+/// nearby terrain. Squaring the fraction clusters samples close to the
+/// receiver (first of 12 at horizon/144 instead of horizon/12) while still
+/// reaching the full horizon at the last one.
+fn sample_distances(horizon_nm: f64, count: usize) -> Vec<f64> {
+    (1..=count)
+        .map(|i| horizon_nm * (i as f64 / count as f64).powi(2))
+        .collect()
 }
 
 /// Destination point at `dist_nm` along `bearing_deg` from (lat, lon) —
@@ -227,6 +334,18 @@ mod tests {
         let (lat2, lon2) = destination(40.0, -73.0, 60.0, 0.0);
         assert!((lat2 - 41.0).abs() < 0.01, "expected ~1 deg north, got {lat2}");
         assert!((lon2 - (-73.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn sample_distances_cluster_near_the_receiver() {
+        let d = sample_distances(120.0, 12);
+        assert_eq!(d.len(), 12);
+        // Old linear spacing put the first sample at horizon/12 = 10nm,
+        // missing any obstruction closer than that entirely. Quadratic
+        // spacing pulls it in to horizon/144 = 0.83nm.
+        assert!(d[0] < 1.0, "expected first sample well under 1nm, got {}", d[0]);
+        assert!((d[11] - 120.0).abs() < 1e-9, "last sample should reach the full horizon");
+        assert!(d.windows(2).all(|w| w[1] > w[0]), "samples must be strictly increasing");
     }
 
     #[test]

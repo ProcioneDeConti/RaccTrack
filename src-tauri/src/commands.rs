@@ -152,11 +152,73 @@ pub async fn compute_coverage(
         .map_err(err)
 }
 
+/// Live progress of an in-flight `compute_coverage` — polled while the
+/// Settings panel shows "Computing…" to drive a real progress bar/ETA, since
+/// a compute at the current terrain resolution takes on the order of minutes
+/// (paced deliberately, to stay under the elevation API's rate limit).
+#[tauri::command]
+pub fn coverage_progress(state: State<AppState>) -> crate::coverage::CoverageProgress {
+    state.coverage.progress()
+}
+
 /// Live progress of the direct-RTL-SDR worker thread — device open? real
 /// messages decoded yet? — so Settings can show more than "no error so far".
 #[tauri::command]
 pub fn rtlsdr_status(state: State<AppState>) -> crate::ingest::rtlsdr::RtlSdrStatus {
     state.rtlsdr.status()
+}
+
+/// Tune the RTL-SDR to a VHF airband frequency and start playing the
+/// AM-demodulated audio — see `atc.rs` for the single-dongle handoff with
+/// ADS-B decoding this does when they'd otherwise contend for one device.
+#[tauri::command]
+pub async fn atc_tune(state: State<'_, AppState>, mhz: f64, device_index: u32) -> CmdResult<()> {
+    state.atc.tune(mhz, device_index).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn atc_stop(state: State<'_, AppState>) -> CmdResult<()> {
+    state.atc.stop().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn atc_status(state: State<AppState>) -> crate::atc::AtcStatus {
+    state.atc.status()
+}
+
+/// Scan across several frequencies at once, parking on whichever one
+/// currently has a transmission — same single/dual-dongle handling as `atc_tune`.
+#[tauri::command]
+pub async fn atc_scan(
+    state: State<'_, AppState>,
+    mhz: Vec<f64>,
+    device_index: u32,
+) -> CmdResult<()> {
+    state.atc.scan(mhz, device_index).await.map_err(err)
+}
+
+/// Start recording the current ATC session to a WAV file in the OS
+/// Downloads folder; returns its path. Errors if nothing is playing yet.
+#[tauri::command]
+pub fn atc_start_recording(app: AppHandle, state: State<AppState>) -> CmdResult<String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().document_dir())
+        .map_err(err)?;
+    let name = format!(
+        "racctrack-atc-{}.wav",
+        crate::logbook::chrono_iso(now_ms()).replace(':', "-")
+    );
+    let path = state.atc.start_recording(dir.join(name)).map_err(err)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn atc_stop_recording(state: State<AppState>) {
+    state.atc.stop_recording();
 }
 
 #[derive(serde::Deserialize)]

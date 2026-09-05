@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { layers, primaryPlace, mapColors } from "../state";
+  import { layers, primaryPlace, mapColors, coverageEnabled } from "../state";
   import { updateSettings } from "../api/backend";
-  import type { MapColors, MapLayers } from "../api/types";
+  import type { FillPattern, MapColors, MapLayers } from "../api/types";
   import Panel from "../ui/Panel.svelte";
   import {
     AIRSPACE_STYLE,
     FLIGHT_CATEGORY_COLORS,
     GEOFENCE_LINE_DEFAULT,
     GEOFENCE_FILL_DEFAULT,
+    COVERAGE_LINE_DEFAULT,
+    COVERAGE_FILL_DEFAULT,
   } from "../theme/colors";
 
   export let onClose: () => void;
@@ -22,6 +24,14 @@
 
   $: l = $layers;
 
+  const PATTERNS: { value: FillPattern; label: string }[] = [
+    { value: "solid", label: "Solid" },
+    { value: "stripe", label: "Stripe" },
+    { value: "hash", label: "Crosshatch" },
+    { value: "dot", label: "Dots" },
+    { value: "check", label: "Checkerboard" },
+  ];
+
   async function saveColors(next: MapColors) {
     const s = await updateSettings({ colors: next });
     mapColors.set(s.colors);
@@ -31,8 +41,26 @@
     for (const k of keys) airspace[k] = hex;
     void saveColors({ ...$mapColors, airspace });
   }
+  // Plain functions, not an inline `as FillPattern` cast in the template —
+  // Svelte's template-expression parser doesn't accept TS type assertions
+  // there the way a `lang="ts"` script block does.
+  function setGeofencePattern(v: string) {
+    void saveColors({ ...$mapColors, geofencePattern: v as FillPattern });
+  }
+  function setCoveragePattern(v: string) {
+    void saveColors({ ...$mapColors, coveragePattern: v as FillPattern });
+  }
+
   function resetColors() {
-    void saveColors({ airspace: {}, geofenceFill: null, geofenceLine: null });
+    void saveColors({
+      airspace: {},
+      geofenceFill: null,
+      geofenceLine: null,
+      geofencePattern: null,
+      coverageFill: null,
+      coverageLine: null,
+      coveragePattern: null,
+    });
   }
 
   // `color` is pulled from the shared theme palette (src/lib/theme/colors.ts);
@@ -117,6 +145,9 @@
 </script>
 
 <Panel title="Map layers" {onClose} width={230}>
+  <label>
+    <input type="checkbox" checked={l.aircraft} on:change={() => toggle("aircraft")} /> Aircraft
+  </label>
   <label><input type="checkbox" checked={l.airports} on:change={() => toggle("airports")} /> Airports</label>
   <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
   <label><input type="checkbox" checked={l.radar} on:change={() => toggle("radar")} /> Weather radar</label>
@@ -177,8 +208,46 @@
         on:input={(e) => saveColors({ ...$mapColors, geofenceFill: e.currentTarget.value })}
       />
       <span class="ex">Fill</span>
+      <select
+        class="pattern"
+        value={$mapColors.geofencePattern ?? "solid"}
+        on:change={(e) => setGeofencePattern(e.currentTarget.value)}
+      >
+        {#each PATTERNS as p}<option value={p.value}>{p.label}</option>{/each}
+      </select>
     </div>
   </div>
+
+  {#if $coverageEnabled}
+    <div class="legend">
+      <div class="lh u-eyebrow">Reception coverage estimate</div>
+      <div class="lrow">
+        <input
+          type="color"
+          class="sw"
+          value={$mapColors.coverageLine ?? COVERAGE_LINE_DEFAULT}
+          on:input={(e) => saveColors({ ...$mapColors, coverageLine: e.currentTarget.value })}
+        />
+        <span class="ex">Outline</span>
+      </div>
+      <div class="lrow">
+        <input
+          type="color"
+          class="sw"
+          value={$mapColors.coverageFill ?? COVERAGE_FILL_DEFAULT}
+          on:input={(e) => saveColors({ ...$mapColors, coverageFill: e.currentTarget.value })}
+        />
+        <span class="ex">Fill</span>
+        <select
+          class="pattern"
+          value={$mapColors.coveragePattern ?? "solid"}
+          on:change={(e) => setCoveragePattern(e.currentTarget.value)}
+        >
+          {#each PATTERNS as p}<option value={p.value}>{p.label}</option>{/each}
+        </select>
+      </div>
+    </div>
+  {/if}
 
   <button type="button" class="reset-colors" on:click={resetColors}>Reset colors to default</button>
 </Panel>
@@ -236,6 +305,12 @@
   input.sw::-webkit-color-swatch {
     border: none;
     border-radius: 2px;
+  }
+  select.pattern {
+    margin-left: auto;
+    font-size: 9px;
+    padding: 1px 3px;
+    max-width: 90px;
   }
   .reset-colors {
     margin-top: 8px;

@@ -222,6 +222,7 @@ export interface MapLayers {
   radar: boolean;
   airspace: boolean;
   rangeRings: boolean;
+  aircraft: boolean;
 }
 
 // Self-collected flight history. Mirrors `src-tauri/src/state.rs`.
@@ -257,6 +258,9 @@ export interface Sighting {
   description: string | null;
   military: boolean;
   note: string | null;
+  /** Whether the first-ever sighting of this airframe came straight off the
+   *  user's own RTL-SDR dongle rather than a community/local feed. */
+  firstSeenDirect: boolean;
 }
 
 export type WatchKind =
@@ -336,11 +340,26 @@ export interface CoverageResult {
   points: CoverageBearing[];
 }
 
+export interface CoverageProgress {
+  running: boolean;
+  batchesDone: number;
+  batchesTotal: number;
+  /** Epoch ms the current compute started. */
+  startedAtMs: number;
+}
+
+/** Vocabulary shared by every pattern-fillable map area. */
+export type FillPattern = "solid" | "stripe" | "hash" | "dot" | "check";
+
 export interface MapColors {
   /** Airspace category (e.g. "CLASS_B", "RESTRICTED") -> hex color override. */
   airspace: Record<string, string>;
   geofenceFill: string | null;
   geofenceLine: string | null;
+  geofencePattern: FillPattern | null;
+  coverageFill: string | null;
+  coverageLine: string | null;
+  coveragePattern: FillPattern | null;
 }
 
 export interface AppSettings {
@@ -354,6 +373,11 @@ export interface AppSettings {
   rtlsdrDeviceIndex: number;
   /** Manual gain in tenths of dB (e.g. 297 = 29.7 dB); null = auto gain. */
   rtlsdrGainTenthsDb: number | null;
+  /** Which dongle ATC voice listening uses — independent of
+   *  rtlsdrDeviceIndex so a second physical dongle can run ADS-B and ATC
+   *  audio at once; same index as the ADS-B dongle pauses ADS-B for the
+   *  session instead. */
+  atcDeviceIndex: number;
   /** Master switch for the community aggregators (adsb.lol / adsb.fi). Off
    *  means local sources (RTL-SDR / local receiver) only — no online lookups. */
   onlineSourcesEnabled: boolean;
@@ -396,6 +420,25 @@ export interface RtlSdrStatus {
   enabled: boolean;
   deviceOpen: boolean;
   messagesDecoded: number;
+  rawCandidates: number;
+  framesParsed: number;
+  adsbFrames: number;
   aircraftTracked: number;
+  lastError: string | null;
+}
+
+export interface AtcStatus {
+  running: boolean;
+  deviceOpen: boolean;
+  tunedMhz: number | null;
+  /** True while listening to more than one frequency — tunedMhz is whichever one it's parked on. */
+  scanning: boolean;
+  /** True for the brief gap while a scan hop is closing and reopening the device. */
+  retuning: boolean;
+  /** True while a transmission is being heard — like a scanner's squelch light. */
+  squelchOpen: boolean;
+  /** True while this session has paused ADS-B decoding to borrow its dongle. */
+  adsbPaused: boolean;
+  recording: boolean;
   lastError: string | null;
 }

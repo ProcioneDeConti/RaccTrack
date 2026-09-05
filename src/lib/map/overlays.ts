@@ -19,13 +19,12 @@ import {
   FLIGHT_CATEGORY_FALLBACK,
   GEOFENCE_LINE_DEFAULT,
   GEOFENCE_FILL_DEFAULT,
+  COVERAGE_LINE_DEFAULT,
   hexToRgba01,
 } from "../theme/colors";
 import { createFillLayer, type FillPolygon } from "./glFill";
 
 const EMPTY = { type: "FeatureCollection", features: [] } as const;
-const COVERAGE_LINE_COLOR = "#22d3ee";
-const COVERAGE_FILL_RGBA = hexToRgba01(COVERAGE_LINE_COLOR, 0.14);
 // 1x1 transparent PNG — the radar source needs *some* tile URL before the first
 // frame is fetched.
 const PLACEHOLDER_TILE =
@@ -91,7 +90,15 @@ export class Overlays {
   /** Last draft (in-progress hand-drawn geofence) FeatureCollection. */
   private draftData: unknown = null;
   /** User color overrides — airspace category overrides + geofence colors. */
-  private colorOverrides: MapColors = { airspace: {}, geofenceFill: null, geofenceLine: null };
+  private colorOverrides: MapColors = {
+    airspace: {},
+    geofenceFill: null,
+    geofenceLine: null,
+    geofencePattern: null,
+    coverageFill: null,
+    coverageLine: null,
+    coveragePattern: null,
+  };
   private lastPlaces: PlaceGeofence[] = [];
   /** Fills geofence interiors directly in WebGL — see glFill.ts for why this
    *  exists instead of a normal `fill` layer. */
@@ -100,6 +107,20 @@ export class Overlays {
    *  independent lifecycle/color from place-alert geofences. */
   private coverageFillLayer = createFillLayer("ov-coverage-fill-gl");
   private coverageData: unknown = null;
+  /** Last-drawn coverage result, so `setColors` can redraw its fill/pattern
+   *  without needing the caller to hand the polygon back too. */
+  private lastCoverage: {
+    receiverLat: number;
+    receiverLon: number;
+    points: { bearingDeg: number; distanceNm: number }[];
+  } | null = null;
+
+  /** A patterned fill has built-in gaps (the pattern *is* transparency in
+   *  places), so it needs a bolder base alpha than a solid wash to read as
+   *  roughly the same visual weight. */
+  private fillAlpha(pattern: string | null | undefined): number {
+    return pattern && pattern !== "solid" ? 0.6 : 0.22;
+  }
 
   /** Draw a dashed ring — and a translucent fill — at each alert-enabled
    *  place's geometry (its drawn shape, or a circle at its radius). */
@@ -118,10 +139,15 @@ export class Overlays {
       this.placeAlertData as any,
     );
 
-    const fillColor = hexToRgba01(this.colorOverrides.geofenceFill ?? GEOFENCE_FILL_DEFAULT, 0.22);
+    const pattern = this.colorOverrides.geofencePattern ?? undefined;
+    const fillColor = hexToRgba01(
+      this.colorOverrides.geofenceFill ?? GEOFENCE_FILL_DEFAULT,
+      this.fillAlpha(pattern),
+    );
     const polygons: FillPolygon[] = active.map((p) => ({
       ring: geofenceRing(p).slice(0, -1),
       color: fillColor,
+      pattern,
     }));
     this.fillLayer.setPolygons(polygons);
     this.map.triggerRepaint();
@@ -137,6 +163,7 @@ export class Overlays {
       points: { bearingDeg: number; distanceNm: number }[];
     } | null,
   ) {
+    this.lastCoverage = result;
     const src = this.map.getSource("ov-coverage") as GeoJSONSource | undefined;
     if (!result || result.points.length < 3) {
       this.coverageData = EMPTY;
@@ -162,7 +189,12 @@ export class Overlays {
       ],
     };
     src?.setData(this.coverageData as any);
-    this.coverageFillLayer.setPolygons([{ ring, color: COVERAGE_FILL_RGBA }]);
+    const pattern = this.colorOverrides.coveragePattern ?? undefined;
+    const fillColor = hexToRgba01(
+      this.colorOverrides.coverageFill ?? COVERAGE_LINE_DEFAULT,
+      this.fillAlpha(pattern),
+    );
+    this.coverageFillLayer.setPolygons([{ ring, color: fillColor, pattern }]);
     this.map.triggerRepaint();
   }
 
@@ -213,7 +245,15 @@ export class Overlays {
         colors.geofenceLine ?? GEOFENCE_LINE_DEFAULT,
       );
     }
+    if (this.map.getLayer("ov-coverage-line")) {
+      this.map.setPaintProperty(
+        "ov-coverage-line",
+        "line-color",
+        colors.coverageLine ?? COVERAGE_LINE_DEFAULT,
+      );
+    }
     this.setPlaceRings(this.lastPlaces);
+    this.setCoverage(this.lastCoverage);
   }
 
   /** Point the radar layer at a new frame (or null before the first fetch). */
@@ -348,8 +388,19 @@ export class Overlays {
       },
     });
 
-    // Fill first so the dashed outline stays crisp on top of it.
-    if (!m.getLayer(this.fillLayer.id)) m.addLayer(this.fillLayer, beforeId);
+    // Fill first so the dashed outline stays crisp on top of it. `moveLayer`
+    // with no second argument forces it to the very top of the stack —
+    // custom `CustomLayerInterface` layers like this one have landed
+    // *underneath* basemap water/lake fills in practice despite being
+    // `addLayer`'d last with no `beforeId`, which should already mean "on
+    // top"; exactly why isn't nailed down (a plausible culprit is the
+    // deck.gl overlay's own internal layer-group bookkeeping shifting where
+    // a plain `addLayer(..., undefined)` call actually lands), but forcing
+    // the position explicitly sidesteps needing to know for sure.
+    if (!m.getLayer(this.fillLayer.id)) {
+      m.addLayer(this.fillLayer, beforeId);
+      m.moveLayer(this.fillLayer.id);
+    }
     add({
       id: "ov-place-alert-line",
       type: "line",
@@ -383,9 +434,11 @@ export class Overlays {
     });
 
     // Fill first so the dashed outline stays crisp on top of it (same
-    // ordering reasoning as the place-alert geofence fill above).
+    // ordering reasoning — and the same forced-to-top fix — as the
+    // place-alert geofence fill above).
     if (!m.getLayer(this.coverageFillLayer.id)) {
       m.addLayer(this.coverageFillLayer, beforeId);
+      m.moveLayer(this.coverageFillLayer.id);
     }
     add({
       id: "ov-coverage-line",
@@ -393,7 +446,7 @@ export class Overlays {
       source: "ov-coverage",
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": COVERAGE_LINE_COLOR,
+        "line-color": this.colorOverrides.coverageLine ?? COVERAGE_LINE_DEFAULT,
         "line-width": 1.6,
         "line-dasharray": [4, 2],
         "line-opacity": 0.85,

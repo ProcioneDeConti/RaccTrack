@@ -112,6 +112,13 @@ pub struct AppSettings {
     /// Manual gain in tenths of dB (e.g. 297 = 29.7 dB); `None` = auto gain.
     #[serde(default)]
     pub rtlsdr_gain_tenths_db: Option<i32>,
+    /// Which dongle ATC voice listening uses — independent of
+    /// `rtlsdr_device_index` so a second physical dongle can run ADS-B and
+    /// ATC audio at once; if it's the *same* index as the ADS-B one, `atc.rs`
+    /// pauses ADS-B decoding for the duration of the listening session
+    /// instead (a single dongle can't do both at the same time).
+    #[serde(default)]
+    pub atc_device_index: u32,
     /// Master switch for the community aggregators (adsb.lol / adsb.fi).
     /// Off means *only* whatever local sources (RTL-SDR / local receiver)
     /// are enabled — no online lookups at all.
@@ -180,6 +187,18 @@ pub struct MapColors {
     pub geofence_fill: Option<String>,
     #[serde(default)]
     pub geofence_line: Option<String>,
+    /// Fill pattern for place-alert geofences — "solid" | "stripe" | "hash" |
+    /// "dot" | "check". `None`/anything unrecognized means solid.
+    #[serde(default)]
+    pub geofence_pattern: Option<String>,
+    #[serde(default)]
+    pub coverage_fill: Option<String>,
+    #[serde(default)]
+    pub coverage_line: Option<String>,
+    /// Same pattern vocabulary as `geofence_pattern`, for the RTL-SDR
+    /// reception coverage polygon.
+    #[serde(default)]
+    pub coverage_pattern: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -195,6 +214,12 @@ pub struct MapLayers {
     pub airspace: bool,
     #[serde(default)]
     pub range_rings: bool,
+    /// Whether aircraft render at all — unlike the other (opt-in, off by
+    /// default) overlays above, this defaults to *on* since aircraft are the
+    /// core feature, not an optional layer; existing installs upgrading
+    /// without this field in their saved settings should see no change.
+    #[serde(default = "default_true")]
+    pub aircraft: bool,
 }
 
 fn default_range_rings() -> Vec<f64> {
@@ -230,6 +255,7 @@ impl Default for AppSettings {
             local_receiver_url: default_local_receiver_url(),
             rtlsdr_enabled: false,
             rtlsdr_device_index: 0,
+            atc_device_index: 0,
             rtlsdr_gain_tenths_db: None,
             online_sources_enabled: true,
             coverage_enabled: false,
@@ -240,7 +266,11 @@ impl Default for AppSettings {
             home: None,
             places: Vec::new(),
             contact: String::new(),
-            layers: MapLayers::default(),
+            // `#[derive(Default)]` ignores `#[serde(default = "default_true")]`
+            // (that only applies when deserializing a JSON blob missing the
+            // field) — a genuinely fresh install goes through this literal,
+            // not serde, so `aircraft` needs setting explicitly here too.
+            layers: MapLayers { aircraft: true, ..Default::default() },
             colors: MapColors::default(),
             range_rings_nm: default_range_rings(),
             pinned: Vec::new(),

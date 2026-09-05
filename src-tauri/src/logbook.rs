@@ -27,6 +27,11 @@ pub struct Sighting {
     pub description: Option<String>,
     pub military: bool,
     pub note: Option<String>,
+    /// Whether the very first sighting of this airframe came straight off
+    /// the user's own RTL-SDR dongle rather than a community/local feed.
+    /// Fixed at first insert — later appearances via other sources don't
+    /// change it, since it describes how this entry *started*.
+    pub first_seen_direct: bool,
 }
 
 fn row_to_sighting(r: &Row) -> rusqlite::Result<Sighting> {
@@ -41,6 +46,7 @@ fn row_to_sighting(r: &Row) -> rusqlite::Result<Sighting> {
         description: r.get("description")?,
         military: r.get::<_, i64>("military")? != 0,
         note: r.get("note")?,
+        first_seen_direct: r.get::<_, i64>("first_seen_direct")? != 0,
     })
 }
 
@@ -61,8 +67,8 @@ impl Logbook {
         let res = self.db.with_conn(|c| {
             let mut stmt = c.prepare_cached(
                 "INSERT INTO sightings
-                   (hex, first_seen, last_seen, count, flight, registration, type_code, description, military, note)
-                 VALUES (?1, ?2, ?2, 1, ?3, ?4, ?5, ?6, ?7, NULL)
+                   (hex, first_seen, last_seen, count, flight, registration, type_code, description, military, note, first_seen_direct)
+                 VALUES (?1, ?2, ?2, 1, ?3, ?4, ?5, ?6, ?7, NULL, ?9)
                  ON CONFLICT(hex) DO UPDATE SET
                    last_seen    = ?2,
                    count        = count + (CASE WHEN ?2 - last_seen > ?8 THEN 1 ELSE 0 END),
@@ -82,6 +88,7 @@ impl Logbook {
                     a.description,
                     a.military as i64,
                     NEW_APPEARANCE_MS,
+                    (a.source == crate::ingest::rtlsdr::NAME) as i64,
                 ])?;
             }
             Ok(())
@@ -215,6 +222,10 @@ mod tests {
     use crate::ingest::model::{Aircraft, PositionSource};
 
     fn ac(hex: &str, reg: Option<&str>) -> Aircraft {
+        ac_src(hex, reg, "t")
+    }
+
+    fn ac_src(hex: &str, reg: Option<&str>, source: &str) -> Aircraft {
         Aircraft {
             hex: hex.into(),
             flight: None,
@@ -250,7 +261,7 @@ mod tests {
             interesting: false,
             pia: false,
             ladd: false,
-            source: "t".into(),
+            source: source.into(),
             observed_at: 0,
         }
     }
@@ -264,6 +275,7 @@ mod tests {
         let s = lb.get("abc").unwrap().unwrap();
         assert_eq!(s.count, 1);
         assert_eq!(s.registration.as_deref(), Some("N1"));
+        assert!(!s.first_seen_direct);
 
         // seen again within the hour -> no count bump
         lb.record(&[ac("abc", None)], 1_000 + 30 * 60 * 1000);
@@ -280,5 +292,22 @@ mod tests {
 
         assert_eq!(lb.count().unwrap(), 1);
         assert!(lb.export_csv().unwrap().contains("abc"));
+    }
+
+    #[test]
+    fn first_seen_direct_reflects_original_source_only() {
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let lb = Logbook::new(db);
+
+        lb.record(&[ac_src("abc", None, crate::ingest::rtlsdr::NAME)], 1_000);
+        assert!(lb.get("abc").unwrap().unwrap().first_seen_direct);
+
+        // A later appearance via a community feed doesn't rewrite how this
+        // airframe was *first* seen.
+        lb.record(&[ac_src("abc", None, "adsb.lol")], 1_000 + 2 * 60 * 60 * 1000);
+        assert!(lb.get("abc").unwrap().unwrap().first_seen_direct);
+
+        lb.record(&[ac_src("xyz", None, "adsb.lol")], 1_000);
+        assert!(!lb.get("xyz").unwrap().unwrap().first_seen_direct);
     }
 }

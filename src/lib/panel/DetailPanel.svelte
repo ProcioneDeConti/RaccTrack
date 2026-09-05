@@ -225,6 +225,11 @@
       <button class="close" on:click={close} title="Close" aria-label="Close"><Icon name="x" size={14} /></button>
       <div class="title">
         <span class="cs">{live?.flight ?? live?.registration ?? currentHex}</span>
+        {#if live?.source === "rtl-sdr"}
+          <span class="direct" title="Received directly via RTL-SDR"
+            ><Icon name="wifi" size={13} /></span
+          >
+        {/if}
         {#if live?.military}<span class="tag mil">MIL</span>{/if}
         {#if live?.emergency && live.emergency !== "none"}
           <span class="tag emg">{live.emergency.toUpperCase()}</span>
@@ -404,6 +409,14 @@
   }
   header.has-photo .cs {
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  }
+  .direct {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ok);
+  }
+  header.has-photo .direct {
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.9));
   }
   .credit {
     position: absolute;

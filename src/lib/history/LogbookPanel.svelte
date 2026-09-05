@@ -119,6 +119,11 @@
             <button class="row" on:click={() => pick(s)}>
               <span class="id">
                 {s.registration ?? s.hex.toUpperCase()}
+                {#if s.firstSeenDirect}
+                  <span class="direct" title="First seen directly via RTL-SDR"
+                    ><Icon name="wifi" size={10} /></span
+                  >
+                {/if}
                 {#if s.military}<span class="mil">M</span>{/if}
               </span>
               <span class="ty">{s.typeCode ?? "—"}</span>
@@ -202,6 +207,12 @@
     min-width: 74px;
   }
   .mil {
+    color: var(--ok);
+    margin-left: 3px;
+  }
+  .direct {
+    display: inline-flex;
+    vertical-align: middle;
     color: var(--ok);
     margin-left: 3px;
   }

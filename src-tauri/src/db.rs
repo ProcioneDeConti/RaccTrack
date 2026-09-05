@@ -120,6 +120,23 @@ CREATE TABLE IF NOT EXISTS sightings (
 CREATE INDEX IF NOT EXISTS idx_sightings_last ON sightings(last_seen DESC);
 "#;
 
+/// One-off column additions to tables that already existed before the column
+/// was introduced — `CREATE TABLE IF NOT EXISTS` above only helps on a brand
+/// new database; an existing install's `sightings` table needs an explicit,
+/// idempotent `ALTER TABLE` to pick up anything added later.
+fn migrate(conn: &Connection) -> Result<()> {
+    let has_column: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('sightings') WHERE name = 'first_seen_direct'")?
+        .exists([])?;
+    if !has_column {
+        conn.execute(
+            "ALTER TABLE sightings ADD COLUMN first_seen_direct INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 impl Db {
     pub fn open(path: &Path) -> Result<Self> {
         let conn = Connection::open(path)?;
@@ -127,6 +144,7 @@ impl Db {
             "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
         )?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -136,6 +154,7 @@ impl Db {
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })

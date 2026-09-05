@@ -57,55 +57,6 @@ export function sizeMulFor(kind: IconKind): number {
   return SIZE_MUL[kind] ?? 1;
 }
 
-// --- label chips ------------------------------------------------------------
-//
-// A fixed-size rounded-rect pill for the combined callsign + altitude map
-// label, with the text laid out centered on top of it in the same symbol
-// layer — the exact same "icon + text-field together, both offset from the
-// anchor identically" mechanism the plane's own callsign label already used
-// successfully before this feature existed. SDF so `icon-color`/`icon-halo-*`
-// can tint its fill and border per theme, same as the plane icons. Deliberately
-// NOT using `icon-text-fit` — two earlier attempts at a stretch-to-fit pill
-// both misbehaved (badly oversized boxes / boxes overlapping the aircraft) in
-// ways that weren't reproducible from reading MapLibre's source alone. A
-// fixed size sacrifices hugging the text exactly, but removes that mechanism
-// entirely, so it can't recur.
-//
-// Callsign and altitude stack as two lines rather than sharing one, so the
-// pill is sized for the longer of the two individual strings (e.g.
-// "12,400 ft"), not the combined length.
-
-export const CHIP_PILL_ID = "chip-pill";
-
-const PILL_W = 140;
-const PILL_H = 76;
-const PILL_R = 9;
-const PILL_MARGIN = 12;
-const PILL_CANVAS_W = PILL_W + PILL_MARGIN * 2;
-const PILL_CANVAS_H = PILL_H + PILL_MARGIN * 2;
-const PILL_SDF_RADIUS = 8;
-
-function pillSdf(): ImageData {
-  const c = document.createElement("canvas");
-  c.width = PILL_CANVAS_W;
-  c.height = PILL_CANVAS_H;
-  const ctx = c.getContext("2d")!;
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.roundRect(PILL_MARGIN, PILL_MARGIN, PILL_W, PILL_H, PILL_R);
-  ctx.fill();
-
-  const px = ctx.getImageData(0, 0, PILL_CANVAS_W, PILL_CANVAS_H).data;
-  const alpha = new Uint8ClampedArray(PILL_CANVAS_W * PILL_CANVAS_H);
-  for (let i = 0; i < alpha.length; i++) alpha[i] = px[i * 4 + 3];
-  return alphaToSdf(alpha, PILL_CANVAS_W, PILL_CANVAS_H, PILL_SDF_RADIUS);
-}
-
-export function registerChipIcon(map: MlMap): void {
-  if (map.hasImage(CHIP_PILL_ID)) return;
-  map.addImage(CHIP_PILL_ID, pillSdf(), { sdf: true, pixelRatio: 2 });
-}
-
 // Paths are authored in a 64-unit box; render them into a larger canvas with a
 // generous margin so the SDF — and thus the halo / outline / shadow blur — has
 // room and isn't clipped at the edges.
@@ -138,52 +89,14 @@ export function registerAircraftIcons(map: MlMap): void {
   }
 }
 
-// --- "direct RTL-SDR" badge -------------------------------------------------
-//
-// A small standalone WiFi-style glyph (dot + two signal arcs) marking an
-// aircraft heard straight off the user's own dongle rather than a community
-// feed. Solo icon, no text, no stretching — the same plain technique the
-// aircraft shapes above already use without issue, deliberately not repeating
-// the icon-text-fit/compositing tricks that caused trouble on the info chip.
-
-export const RTLSDR_BADGE_ID = "rtlsdr-badge";
-
-function signalBadgeSdf(): ImageData {
-  const c = document.createElement("canvas");
-  c.width = CANVAS;
-  c.height = CANVAS;
-  const ctx = c.getContext("2d")!;
-  ctx.translate(MARGIN, MARGIN);
-  ctx.scale(SCALE, SCALE);
-  ctx.fillStyle = "#fff";
-  ctx.strokeStyle = "#fff";
-  ctx.lineCap = "round";
-
-  const cx = 32;
-  const cy = 46;
-  ctx.beginPath();
-  ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.lineWidth = 8;
-  const up = 1.5 * Math.PI;
-  const spread = 0.65;
-  for (const r of [16, 27]) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, up - spread, up + spread);
-    ctx.stroke();
-  }
-
-  const px = ctx.getImageData(0, 0, CANVAS, CANVAS).data;
-  const alpha = new Uint8ClampedArray(CANVAS * CANVAS);
-  for (let i = 0; i < alpha.length; i++) alpha[i] = px[i * 4 + 3];
-  return alphaToSdf(alpha, CANVAS, CANVAS, SDF_RADIUS);
-}
-
-export function registerRtlsdrBadge(map: MlMap): void {
-  if (map.hasImage(RTLSDR_BADGE_ID)) return;
-  map.addImage(RTLSDR_BADGE_ID, signalBadgeSdf(), { sdf: true, pixelRatio: 2 });
-}
+// The info chip (pill + callsign/altitude), its RTL-SDR wifi badge, and the
+// leader line joining it to the plane used to be SDF images registered here
+// too (`CHIP_PILL_ID`, `CHIP_LEADER_ID`, `RTLSDR_BADGE_ID`) — they're now
+// rendered by a deck.gl overlay instead (see `aircraftChips.ts`), which
+// builds its own small raster icon atlas rather than reusing this file's
+// MapLibre-specific SDF pipeline. The DOM-side list/detail-panel UI uses its
+// own separate Lucide-style `Icon` component for the wifi glyph, unrelated
+// to either of these.
 
 // --- classification -------------------------------------------------------
 

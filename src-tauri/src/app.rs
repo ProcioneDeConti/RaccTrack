@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use arc_swap::ArcSwap;
 
 use crate::airspace::Airspace;
+use crate::atc::AtcListener;
 use crate::coverage::Coverage;
 use crate::alerts::Alerts;
 use crate::charts::Charts;
@@ -35,6 +36,9 @@ pub struct AppState {
     /// `status()` (not part of the trait — every other source is a plain
     /// request/response HTTP fetch with nothing analogous to report).
     pub rtlsdr: Arc<RtlSdrSource>,
+    /// ATC voice audio (airband AM off the same RTL-SDR hardware) — see
+    /// `atc.rs` for how it shares/hands off a dongle with `rtlsdr` above.
+    pub atc: Arc<AtcListener>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,

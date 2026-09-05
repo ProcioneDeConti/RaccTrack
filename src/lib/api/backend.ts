@@ -9,7 +9,9 @@ import type {
   GeoResult,
   LocalReceiverProbe,
   RtlSdrStatus,
+  AtcStatus,
   CoverageResult,
+  CoverageProgress,
   Sighting,
   SourceStatus,
   TrailPoint,
@@ -95,8 +97,36 @@ export function fixUsbDriver(): Promise<void> {
   return invoke("fix_usb_driver");
 }
 
+export function atcTune(mhz: number, deviceIndex: number): Promise<void> {
+  return invoke("atc_tune", { mhz, deviceIndex });
+}
+
+export function atcStop(): Promise<void> {
+  return invoke("atc_stop");
+}
+
+export function getAtcStatus(): Promise<AtcStatus> {
+  return invoke("atc_status");
+}
+
+export function atcScan(mhz: number[], deviceIndex: number): Promise<void> {
+  return invoke("atc_scan", { mhz, deviceIndex });
+}
+
+export function atcStartRecording(): Promise<string> {
+  return invoke("atc_start_recording");
+}
+
+export function atcStopRecording(): Promise<void> {
+  return invoke("atc_stop_recording");
+}
+
 export function computeCoverage(): Promise<CoverageResult> {
   return invoke("compute_coverage");
+}
+
+export function coverageProgress(): Promise<CoverageProgress> {
+  return invoke("coverage_progress");
 }
 
 export function getAllTrails(): Promise<Record<string, TrailPoint[]>> {

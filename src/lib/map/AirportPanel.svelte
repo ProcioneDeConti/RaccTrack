@@ -1,8 +1,16 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { selectedAirport, chartTarget } from "../state";
-  import { airportInfo, stationWx } from "../api/backend";
-  import type { AirportInfo, StationWx } from "../api/types";
+  import { selectedAirport, chartTarget, atcStatus } from "../state";
+  import {
+    airportInfo,
+    stationWx,
+    getSettings,
+    atcTune,
+    atcStop,
+    atcScan,
+    getAtcStatus,
+  } from "../api/backend";
+  import type { AirportInfo, StationWx, Frequency } from "../api/types";
   import { altitude } from "../format";
   import { decodeMetar, decodeTaf } from "../wx/metar";
   import Icon from "../ui/Icon.svelte";
@@ -14,6 +22,66 @@
   } from "../theme/colors";
 
   let showRaw = false;
+  let listenError: string | null = null;
+
+  /** Within a few kHz counts as "this is the frequency we're listening to"
+   *  — avoids float-equality issues comparing a parsed MHz string. */
+  function isTuned(f: Frequency): boolean {
+    const mhz = parseFloat(f.mhz);
+    return $atcStatus?.running === true && Math.abs(($atcStatus.tunedMhz ?? -1) - mhz) < 0.0005;
+  }
+
+  async function toggleListen(f: Frequency) {
+    listenError = null;
+    if (isTuned(f)) {
+      await atcStop();
+      return;
+    }
+    const mhz = parseFloat(f.mhz);
+    if (!Number.isFinite(mhz)) return;
+    try {
+      const s = await getSettings();
+      await atcTune(mhz, s.atcDeviceIndex);
+      // `atcTune` resolves as soon as the attempt is *started*, not once
+      // the device/audio is actually confirmed working (that happens on a
+      // background thread) — the app-wide 1s poll (App.svelte) will pick up
+      // a failure eventually, but re-checking right away means a fast
+      // failure (e.g. the device won't open) shows up immediately here
+      // instead of up to a second later, with no visible sign the click
+      // did anything in between.
+      atcStatus.set(await getAtcStatus());
+    } catch (e) {
+      listenError = humanizeError(e);
+    }
+  }
+
+  function airbandFreqs(): number[] {
+    return (info?.frequencies ?? [])
+      .map((f) => parseFloat(f.mhz))
+      .filter((mhz) => Number.isFinite(mhz) && mhz >= 108 && mhz <= 137);
+  }
+
+  $: isScanningThis =
+    $atcStatus?.running === true &&
+    $atcStatus.scanning &&
+    airbandFreqs().some((mhz) => Math.abs(($atcStatus?.tunedMhz ?? -1) - mhz) < 0.0005);
+
+  async function toggleScanAll() {
+    listenError = null;
+    if ($atcStatus?.running && $atcStatus.scanning) {
+      await atcStop();
+      return;
+    }
+    const freqs = airbandFreqs();
+    if (freqs.length < 2) return;
+    try {
+      const s = await getSettings();
+      await atcScan(freqs, s.atcDeviceIndex);
+      atcStatus.set(await getAtcStatus());
+    } catch (e) {
+      listenError = humanizeError(e);
+    }
+  }
 
   $: decoded = wx?.metar ? decodeMetar(wx.metar) : null;
   $: taf = wx?.tafRaw ? decodeTaf(wx.tafRaw) : null;
@@ -156,7 +224,18 @@
 
       {#if info.frequencies.length}
         <section>
-          <h4>Frequencies</h4>
+          <h4>
+            Frequencies
+            {#if airbandFreqs().length > 1}
+              <button
+                class="scanall"
+                class:on={isScanningThis}
+                on:click={() => void toggleScanAll()}
+              >
+                {isScanningThis ? "Stop scan" : "Scan all"}
+              </button>
+            {/if}
+          </h4>
           {#each info.frequencies as f}
             <div class="fq">
               <span class="fk">
@@ -166,9 +245,24 @@
                   <span class="fdesc">· {f.description}</span>
                 {/if}
               </span>
-              <strong>{f.mhz}</strong>
+              <span class="fv">
+                <strong>{f.mhz}</strong>
+                {#if parseFloat(f.mhz) >= 108 && parseFloat(f.mhz) <= 137}
+                  <button
+                    class="listen"
+                    class:on={isTuned(f)}
+                    title={isTuned(f) ? "Stop listening" : "Listen (via RTL-SDR)"}
+                    on:click={() => void toggleListen(f)}
+                  >
+                    <Icon name={isTuned(f) ? "x" : "activity"} size={11} />
+                  </button>
+                {/if}
+              </span>
             </div>
           {/each}
+          {#if listenError}
+            <p class="rx bad">{listenError}</p>
+          {/if}
         </section>
       {/if}
 
@@ -320,6 +414,56 @@
   .fdesc {
     font-size: 10px;
     color: var(--text-dim);
+  }
+  .fv {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+  }
+  .listen {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 17px;
+    height: 17px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    padding: 0;
+    cursor: pointer;
+  }
+  .listen:hover {
+    color: var(--text);
+    background: var(--bg-elev);
+  }
+  .listen.on {
+    color: #fff;
+    background: var(--ok);
+  }
+  .rx.bad {
+    font-size: 10px;
+    color: var(--emergency);
+  }
+  .scanall {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 9px;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .scanall:hover {
+    color: var(--text);
+  }
+  .scanall.on {
+    color: #fff;
+    background: var(--ok);
+    border-color: var(--ok);
   }
   .muted {
     color: var(--text-dim);

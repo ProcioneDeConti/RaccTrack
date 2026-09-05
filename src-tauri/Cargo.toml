@@ -29,6 +29,11 @@ adsb_deku = { git = "https://github.com/rsadsb/adsb_deku", branch = "master", pa
 # downloaded Zadig with a UAC prompt — driver installation on Windows can't
 # go through a plain CreateProcess, it needs ShellExecute's "runas" verb).
 runas = "1.2"
+# ATC voice audio output (AM-demodulated RTL-SDR airband) — cross-platform,
+# talks to WASAPI on Windows directly, no C toolchain/system lib needed.
+cpal = "0.15"
+# ATC session recording — plain, pure-Rust WAV writer.
+hound = "3"
 tauri = { version = "2", features = [] }
 tauri-plugin-notification = "2.4"
 tauri-plugin-os = "2.3"
