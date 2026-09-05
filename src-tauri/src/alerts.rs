@@ -181,6 +181,24 @@ impl Alerts {
         }
     }
 
+    /// Whether `hex` has a fresh entry in the shared emergency-dedup row —
+    /// exposed so `poller.rs` can gate `state::detect_events`'s own
+    /// Emergency notice against the exact same persisted state this
+    /// struct's `evaluate()` and `emergency_watch.rs` use, closing the
+    /// third copy of the same false-repeat bug: `detect_events` fires
+    /// "into emergency" fresh every time `LiveState` prunes and re-adds a
+    /// track (its own `prev` state resets to "no prior squawk" on
+    /// re-add), which — for an aircraft a community feed only reports
+    /// intermittently, with gaps past `state::STALE_MS` — repeats
+    /// indefinitely even after this struct's own dedup was fixed.
+    pub fn emergency_already_alerted(&self, hex: &str) -> bool {
+        self.db
+            .kv_get(&emergency_kv_key(hex), EMERGENCY_ALREADY_ALERTED_TTL_MS)
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
     pub fn list(&self) -> Result<Vec<WatchEntry>> {
         self.db.with_conn(|c| {
             let mut stmt = c.prepare(
@@ -493,6 +511,22 @@ mod tests {
         // ...then a fresh emergency on the same hex fires again.
         let ev = a.evaluate(&diff_with(vec![ac]), &[]);
         assert_eq!(ev.len(), 1);
+    }
+
+    /// `poller.rs` gates `state::detect_events`'s own "into emergency"
+    /// notice on `emergency_already_alerted` *before* calling `evaluate()`
+    /// each tick — this is the contract that relies on: unmarked before
+    /// `evaluate()` ever sees the hex, marked immediately after.
+    #[test]
+    fn emergency_already_alerted_reflects_evaluate_having_run() {
+        let db = Arc::new(Db::open_in_memory().unwrap());
+        let a = Alerts::new(db);
+        let mut ac = base("abc");
+        ac.squawk = Some("7700".into());
+
+        assert!(!a.emergency_already_alerted("abc"));
+        a.evaluate(&diff_with(vec![ac]), &[]);
+        assert!(a.emergency_already_alerted("abc"));
     }
 
     #[test]

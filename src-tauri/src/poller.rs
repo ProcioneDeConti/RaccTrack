@@ -285,6 +285,23 @@ impl Poller {
             self.logbook.record(&diff.added, now);
         }
 
+        // `state::detect_events` fires "into emergency" fresh every time
+        // `LiveState` prunes a track (idle past `STALE_MS`) and re-adds it
+        // later — its `prev` state resets, so this looks like a brand new
+        // transition every time. For an aircraft a community feed only
+        // reports intermittently (common for one far outside the current
+        // viewport, which is exactly when this got noticed — the whole
+        // point of `state::detect_events` running regardless of viewport),
+        // that repeats indefinitely. Gate it against the same persisted
+        // dedup `alerts.evaluate()` (below) and `emergency_watch.rs` share
+        // — checked *before* `evaluate()` runs so this reflects state left
+        // over from a previous poll, not one `evaluate()` is about to
+        // write for this same tick (which would wrongly suppress even a
+        // brand new, first-ever transition).
+        diff.events.retain(|e| {
+            e.kind != EventKind::Emergency || !self.alerts.emergency_already_alerted(&e.hex)
+        });
+
         let places = self.settings.lock().places.clone();
         let alerts = self.alerts.evaluate(&diff, &places);
 
