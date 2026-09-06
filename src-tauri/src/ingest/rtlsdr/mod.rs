@@ -19,6 +19,7 @@
 //! not the `AircraftSource` trait.
 
 pub mod demod;
+pub mod ehs;
 pub mod mode_ac;
 
 use std::collections::HashMap;
@@ -66,6 +67,16 @@ struct Track {
     odd: Option<(Altitude, i64)>,
     last_seen_ms: i64,
     last_pos_ms: Option<i64>,
+    // Mode S enhanced surveillance (Comm-B / DF20-21), see `ehs`.
+    roll: Option<f64>,
+    track_rate: Option<f64>,
+    ias: Option<f64>,
+    tas: Option<f64>,
+    mach: Option<f64>,
+    mag_heading: Option<f64>,
+    nav_altitude: Option<f64>,
+    nav_qnh: Option<f64>,
+    ehs_at_ms: Option<i64>,
 }
 
 impl Track {
@@ -86,10 +97,23 @@ impl Track {
             odd: None,
             last_seen_ms: now,
             last_pos_ms: None,
+            roll: None,
+            track_rate: None,
+            ias: None,
+            tas: None,
+            mach: None,
+            mag_heading: None,
+            nav_altitude: None,
+            nav_qnh: None,
+            ehs_at_ms: None,
         }
     }
 
     fn to_raw(&self, now: i64) -> RawAircraft {
+        // Bank angle and turn rate change second-to-second — don't keep
+        // showing a stale value once the EHS replies stop. Slower-changing
+        // EHS fields (speeds, heading) ride along with the track lifetime.
+        let ehs_fresh = self.ehs_at_ms.map(|t| now - t < 5_000).unwrap_or(false);
         RawAircraft {
             hex: Some(self.hex.clone()),
             r#type: Some("adsb_icao".into()),
@@ -101,20 +125,22 @@ impl Track {
             alt_baro: self.alt_baro.map(AltBaro::Num),
             alt_geom: None,
             gs: self.ground_speed,
-            ias: None,
-            tas: None,
-            mach: None,
+            ias: self.ias,
+            tas: self.tas,
+            mach: self.mach,
             track: self.track_deg,
-            mag_heading: None,
+            mag_heading: self.mag_heading,
             true_heading: None,
+            roll: if ehs_fresh { self.roll } else { None },
+            track_rate: if ehs_fresh { self.track_rate } else { None },
             baro_rate: self.baro_rate,
             geom_rate: None,
             squawk: self.squawk.clone(),
             emergency: self.emergency.clone(),
-            nav_altitude_mcp: None,
+            nav_altitude_mcp: self.nav_altitude,
             nav_altitude_fms: None,
             nav_heading: None,
-            nav_qnh: None,
+            nav_qnh: self.nav_qnh,
             lat: self.lat,
             lon: self.lon,
             rssi: None,
@@ -396,10 +422,19 @@ fn run_worker(
             for c in candidates {
                 if let Ok(frame) = Frame::from_bytes(&c.bytes) {
                     frames_parsed.fetch_add(1, Ordering::Relaxed);
-                    if matches!(&frame.df, DF::ADSB(_)) {
+                    let is_adsb = matches!(frame.df, DF::ADSB(_));
+                    let is_commb = matches!(
+                        frame.df,
+                        DF::CommBAltitudeReply { .. } | DF::CommBIdentityReply { .. }
+                    );
+                    let recovered_icao = frame.crc;
+                    if is_adsb {
                         adsb_frames.fetch_add(1, Ordering::Relaxed);
-                    }
-                    if apply_frame(&mut t, frame, now) {
+                        if apply_frame(&mut t, frame, now) {
+                            messages_decoded.fetch_add(1, Ordering::Relaxed);
+                        }
+                    } else if is_commb && apply_commb(&mut t, &c.bytes, recovered_icao, now) {
+                        // EHS only lands on aircraft we already track via ADS-B.
                         messages_decoded.fetch_add(1, Ordering::Relaxed);
                     }
                 }
@@ -529,6 +564,70 @@ fn apply_frame(tracks: &mut HashMap<String, Track>, frame: Frame, now: i64) -> b
         }
         _ => {}
     }
+    true
+}
+
+/// Apply a DF20/21 Comm-B reply's enhanced-surveillance data. The address is
+/// recovered by CRC-XOR (`recovered_icao`) and is only trustworthy against an
+/// aircraft we're *already* tracking via ADS-B — so this is a no-op for any
+/// other address. `bytes` is the full 14-byte message; MB is bytes 4..11.
+fn apply_commb(
+    tracks: &mut HashMap<String, Track>,
+    bytes: &[u8],
+    recovered_icao: u32,
+    now: i64,
+) -> bool {
+    let Ok(mb) = <[u8; 7]>::try_from(bytes.get(4..11).unwrap_or_default()) else {
+        return false;
+    };
+    let hex = format!("{recovered_icao:06x}");
+    let Some(t) = tracks.get_mut(&hex) else {
+        return false;
+    };
+    match ehs::infer(&mb, t.track_deg) {
+        Some(ehs::Ehs::Bds50(v)) => {
+            // Roll and turn rate aren't in ADS-B at all — always take them.
+            if v.roll.is_some() {
+                t.roll = v.roll;
+            }
+            if v.track_rate.is_some() {
+                t.track_rate = v.track_rate;
+            }
+            if v.true_airspeed.is_some() {
+                t.tas = v.true_airspeed;
+            }
+            // GS / track: only fill if ADS-B hasn't (its own velocity messages
+            // are the authority when present).
+            if t.ground_speed.is_none() {
+                t.ground_speed = v.ground_speed;
+            }
+            if t.track_deg.is_none() {
+                t.track_deg = v.true_track;
+            }
+        }
+        Some(ehs::Ehs::Bds60(v)) => {
+            if v.mag_heading.is_some() {
+                t.mag_heading = v.mag_heading;
+            }
+            if v.ias.is_some() {
+                t.ias = v.ias;
+            }
+            if v.mach.is_some() {
+                t.mach = v.mach;
+            }
+        }
+        Some(ehs::Ehs::Bds40(v)) => {
+            if t.nav_altitude.is_none() {
+                t.nav_altitude = v.mcp_alt_ft.or(v.fms_alt_ft);
+            }
+            if v.qnh_mb.is_some() {
+                t.nav_qnh = v.qnh_mb;
+            }
+        }
+        None => return false,
+    }
+    t.ehs_at_ms = Some(now);
+    t.last_seen_ms = now;
     true
 }
 

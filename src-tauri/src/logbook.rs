@@ -245,6 +245,8 @@ mod tests {
             track: None,
             mag_heading: None,
             true_heading: None,
+            roll: None,
+            track_rate: None,
             baro_rate: None,
             geom_rate: None,
             squawk: None,

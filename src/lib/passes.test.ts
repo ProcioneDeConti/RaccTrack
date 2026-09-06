@@ -25,6 +25,8 @@ function ac(partial: Partial<Aircraft>): Aircraft {
     track: null,
     magHeading: null,
     trueHeading: null,
+    roll: null,
+    trackRate: null,
     baroRate: null,
     geomRate: null,
     squawk: null,

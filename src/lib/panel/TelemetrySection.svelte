@@ -7,6 +7,17 @@
 
   $: sqMeaning = squawkMeaning(live?.squawk ?? null);
   $: vr = live?.baroRate ?? live?.geomRate ?? 0;
+
+  function bank(roll: number | null | undefined): string {
+    if (roll == null) return "—";
+    if (Math.abs(roll) < 1.5) return "wings level";
+    return `${Math.abs(roll).toFixed(0)}° ${roll < 0 ? "left" : "right"}`;
+  }
+  function turn(rate: number | null | undefined): string {
+    if (rate == null) return "—";
+    if (Math.abs(rate) < 0.1) return "straight";
+    return `${Math.abs(rate).toFixed(1)}°/s ${rate < 0 ? "left" : "right"}`;
+  }
 </script>
 
 <section class="panel-section">
@@ -19,6 +30,8 @@
     <dt>Mach</dt><dd>{live?.mach ?? "—"}</dd>
     <dt>Track</dt><dd>{degrees(live?.track ?? null)}</dd>
     <dt>Heading</dt><dd>{degrees(live?.trueHeading ?? live?.magHeading ?? null)}</dd>
+    {#if live?.roll != null}<dt>Bank</dt><dd>{bank(live.roll)}</dd>{/if}
+    {#if live?.trackRate != null}<dt>Turn rate</dt><dd>{turn(live.trackRate)}</dd>{/if}
     <dt>Vertical rate</dt>
     <dd class="vr">
       {#if vr > 0}<Icon name="arrow-up" size={11} />

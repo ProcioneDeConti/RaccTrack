@@ -147,6 +147,8 @@ impl Track {
             track: self.track_deg,
             mag_heading: None,
             true_heading: None,
+            roll: None,
+            track_rate: None,
             baro_rate: self.baro_rate,
             geom_rate: self.geom_rate,
             squawk: None,

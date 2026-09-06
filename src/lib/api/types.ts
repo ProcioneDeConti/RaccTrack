@@ -20,6 +20,8 @@ export interface Aircraft {
   track: number | null; // degrees true
   magHeading: number | null;
   trueHeading: number | null;
+  roll: number | null; // bank angle, deg (+ = right wing down); feed or Mode S EHS
+  trackRate: number | null; // turn rate, deg/s (+ = right); feed or Mode S EHS
   baroRate: number | null; // ft/min
   geomRate: number | null;
   squawk: string | null;

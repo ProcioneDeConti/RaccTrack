@@ -25,6 +25,10 @@ pub struct RawAircraft {
     pub track: Option<f64>,
     pub mag_heading: Option<f64>,
     pub true_heading: Option<f64>,
+    /// Bank angle, deg (+ = right wing down). readsb JSON `roll`.
+    pub roll: Option<f64>,
+    /// Turn rate, deg/s (+ = turning right). readsb JSON `track_rate`.
+    pub track_rate: Option<f64>,
     pub baro_rate: Option<f64>,
     pub geom_rate: Option<f64>,
     pub squawk: Option<String>,
@@ -110,6 +114,10 @@ pub struct Aircraft {
     pub track: Option<f64>,
     pub mag_heading: Option<f64>,
     pub true_heading: Option<f64>,
+    /// Bank angle, deg (+ = right wing down). From the feed or Mode S EHS.
+    pub roll: Option<f64>,
+    /// Turn rate, deg/s (+ = turning right). From the feed or Mode S EHS.
+    pub track_rate: Option<f64>,
     pub baro_rate: Option<f64>,
     pub geom_rate: Option<f64>,
 
@@ -196,6 +204,8 @@ impl Aircraft {
             track: raw.track,
             mag_heading: raw.mag_heading,
             true_heading: raw.true_heading,
+            roll: raw.roll,
+            track_rate: raw.track_rate,
             baro_rate: raw.baro_rate,
             geom_rate: raw.geom_rate,
             squawk: clean(raw.squawk),

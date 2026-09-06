@@ -10,6 +10,13 @@ app is pre-1.0, a minor bump may still include breaking changes.
 
 ### Added
 
+- Mode S enhanced-surveillance decode: DF20/21 Comm-B replies from the direct
+  RTL-SDR feed are parsed for BDS 4,0 / 5,0 / 6,0 — bank angle, turn rate,
+  IAS, Mach, magnetic heading, selected altitude and QNH — cross-checked
+  against ADS-B-tracked aircraft. The detail panel gains "Bank" and "Turn
+  rate" rows, and the existing IAS/Mach/heading fields now populate for
+  RTL-SDR and local-receiver users, not just the community feeds.
+
 - VOR navigation (rail → "VOR navigation", RTL-SDR only): tune a nearby VOR and
   decode its radial and Morse ident straight off the dongle, shown on a compass
   dial next to the geometric radial from your primary place (with the
