@@ -15,11 +15,13 @@ mod geocode;
 mod history;
 mod ingest;
 mod logbook;
+mod nav;
 mod notable;
 mod poller;
 mod region;
 mod state;
 mod tiles;
+mod update;
 mod util;
 mod weather;
 
@@ -35,7 +37,7 @@ use crate::config::AppSettings;
 use crate::db::Db;
 use crate::enrich::{
     actypes::AcTypes, aircraft_db::AircraftDb, airlines::Airlines, airports::Airports,
-    photos::PhotoLookup, routes::RouteLookup, Enricher,
+    navaids::Navaids, photos::PhotoLookup, routes::RouteLookup, Enricher,
 };
 use crate::airspace::Airspace;
 use crate::coverage::Coverage;
@@ -119,12 +121,14 @@ pub fn run() {
             let airports = Arc::new(ArcSwap::from_pointee(Airports::empty()));
             let airlines = Arc::new(ArcSwap::from_pointee(Airlines::empty()));
             let actypes = Arc::new(ArcSwap::from_pointee(AcTypes::empty()));
+            let navaids = Arc::new(ArcSwap::from_pointee(Navaids::empty()));
             spawn_reference_loaders(
                 handle.clone(),
                 aircraft_db.clone(),
                 airports.clone(),
                 airlines.clone(),
                 actypes.clone(),
+                navaids.clone(),
             );
 
             let enricher = Arc::new(Enricher::new(
@@ -168,6 +172,7 @@ pub fn run() {
             let rtlsdr = Arc::new(RtlSdrSource::new(settings.clone()));
             let atc = Arc::new(atc::AtcListener::new(settings.clone(), rtlsdr.clone()));
             let acars = Arc::new(acars::AcarsListener::new(settings.clone(), rtlsdr.clone()));
+            let vor = Arc::new(nav::vor::VorListener::new(settings.clone(), rtlsdr.clone()));
             let uat = Arc::new(ingest::uat::UatSource::new(settings.clone()));
             let sources: Vec<Arc<dyn AircraftSource>> = vec![
                 rtlsdr.clone(),
@@ -183,6 +188,7 @@ pub fn run() {
                 rtlsdr: rtlsdr.clone(),
                 atc: atc.clone(),
                 acars: acars.clone(),
+                vor: vor.clone(),
                 uat: uat.clone(),
                 enricher: enricher.clone(),
                 alerts: alerts.clone(),
@@ -196,6 +202,7 @@ pub fn run() {
                 charts: charts.clone(),
                 datalink: datalink.clone(),
                 airports: airports.clone(),
+                navaids: navaids.clone(),
                 db: db.clone(),
                 settings: settings.clone(),
                 viewport: viewport.clone(),
@@ -250,6 +257,10 @@ pub fn run() {
             commands::acars_messages,
             commands::acars_clear_messages,
             commands::uat_status,
+            commands::vor_tune,
+            commands::vor_stop,
+            commands::vor_status,
+            commands::vor_fix_start,
             commands::mode_ac_contacts,
             commands::fix_usb_driver,
             commands::compute_coverage,
@@ -263,12 +274,16 @@ pub fn run() {
             commands::set_watch_enabled,
             commands::get_settings,
             commands::update_settings,
+            commands::check_for_update,
             commands::tile_cache_stats,
             commands::clear_tile_cache,
             commands::download_tile_area,
             commands::airports_in,
             commands::airport_info,
             commands::find_airport,
+            commands::navaids_in,
+            commands::navaid_info,
+            commands::nearest_navaids,
             commands::metars_in,
             commands::station_wx,
             commands::airspace_in,
@@ -293,6 +308,7 @@ fn spawn_reference_loaders(
     airports: Arc<ArcSwap<Airports>>,
     airlines: Arc<ArcSwap<Airlines>>,
     actypes: Arc<ArcSwap<AcTypes>>,
+    navaids: Arc<ArcSwap<Navaids>>,
 ) {
     tauri::async_runtime::spawn_blocking(move || {
         let resolve = |rel: &str| -> Option<std::path::PathBuf> {
@@ -358,6 +374,17 @@ fn spawn_reference_loaders(
                 Err(e) => tracing::warn!("actypes load failed: {e}"),
             },
             None => tracing::warn!("actypes.json resource not found"),
+        }
+
+        match resolve("assets/navaids.csv").and_then(|p| std::fs::read(&p).ok()) {
+            Some(bytes) => match Navaids::load(&bytes) {
+                Ok(n) => {
+                    tracing::info!("navaids loaded: {} entries", n.len());
+                    navaids.store(Arc::new(n));
+                }
+                Err(e) => tracing::warn!("navaids load failed: {e}"),
+            },
+            None => tracing::warn!("navaids.csv resource not found"),
         }
     });
 }

@@ -13,9 +13,11 @@
   import LogbookPanel from "./lib/history/LogbookPanel.svelte";
   import AcarsPanel from "./lib/acars/AcarsPanel.svelte";
   import ModeAcPanel from "./lib/modeac/ModeAcPanel.svelte";
+  import NavPanel from "./lib/nav/NavPanel.svelte";
   import SettingsPanel from "./lib/settings/SettingsPanel.svelte";
   import AboutPanel from "./lib/about/AboutPanel.svelte";
   import DisclaimerModal from "./lib/about/DisclaimerModal.svelte";
+  import UpdateBanner from "./lib/about/UpdateBanner.svelte";
   import StatusBar from "./lib/StatusBar.svelte";
   import AlertToast from "./lib/watchlist/AlertToast.svelte";
   import AircraftList from "./lib/aircraftlist/AircraftList.svelte";
@@ -37,7 +39,9 @@
     coverageResult,
     atcStatus,
     acarsStatus,
+    vorStatus,
     rtlsdrConnected,
+    updateInfo,
   } from "./lib/state";
   import {
     onDiff,
@@ -50,7 +54,9 @@
     computeCoverage,
     getAtcStatus,
     getAcarsStatus,
+    getVorStatus,
     listRtlsdrDevices,
+    checkForUpdate,
   } from "./lib/api/backend";
   import { pushAlert, refreshWatch } from "./lib/watchlist/watchStore";
   import { horizonOpen } from "./lib/horizon";
@@ -70,6 +76,7 @@
     | "logbook"
     | "acars"
     | "modeac"
+    | "nav"
     | "settings"
     | "about";
 
@@ -107,6 +114,15 @@
       try {
         const s = await getSettings();
         notificationsEnabled = s.notificationsEnabled;
+        if (s.updateCheckEnabled) {
+          // Backend throttles this to ~once/20 h and never throws — a newer
+          // release just flips `updateInfo`, which UpdateBanner reacts to.
+          void checkForUpdate()
+            .then((u) => updateInfo.set(u))
+            .catch(() => {
+              /* IPC hiccup during startup — the About panel can retry */
+            });
+        }
         units.set(s.units);
         pinned.set(s.pinned ?? []);
         places.set(s.places ?? []);
@@ -169,6 +185,12 @@
     pollAcars();
     const acarsTimer = window.setInterval(pollAcars, 1000);
 
+    const pollVor = () => {
+      void getVorStatus().then((s) => vorStatus.set(s));
+    };
+    pollVor();
+    const vorTimer = window.setInterval(pollVor, 1000);
+
     // Device presence changes rarely (a human plugging/unplugging a
     // dongle), so this polls far slower than the status timers above.
     const pollRtlsdrConnected = () => {
@@ -183,6 +205,7 @@
       unlisteners.forEach((p) => p.then((u) => u()));
       clearInterval(atcTimer);
       clearInterval(acarsTimer);
+      clearInterval(vorTimer);
       clearInterval(rtlsdrConnectedTimer);
     };
   });
@@ -192,7 +215,7 @@
   // user parked on a panel whose controls can no longer do anything.
   $: if (
     !$rtlsdrConnected &&
-    (panel === "acars" || panel === "modeac")
+    (panel === "acars" || panel === "modeac" || panel === "nav")
   ) {
     panel = "none";
   }
@@ -242,6 +265,8 @@
       <AcarsPanel onClose={close} />
     {:else if panel === "modeac"}
       <ModeAcPanel onClose={close} />
+    {:else if panel === "nav"}
+      <NavPanel onClose={close} />
     {:else if panel === "settings"}
       <SettingsPanel onClose={close} {currentBbox} />
     {:else if panel === "about"}
@@ -254,6 +279,7 @@
     <PinnedBar />
     {#if $horizonOpen}<HorizonView />{/if}
     <AlertToast />
+    <UpdateBanner />
   </div>
   <StatusBar />
   {#if $disclaimerOpen}

@@ -401,6 +401,21 @@
                 at the same time; picking the same one pauses ADS-B decoding
                 for as long as you're listening.
               </p>
+              <label class="row">
+                VOR decoder device
+                <select
+                  value={s.navDeviceIndex}
+                  on:change={(e) => patch({ navDeviceIndex: +e.currentTarget.value })}
+                >
+                  {#each rtlDevices as d, i}
+                    <option value={i}>{d}</option>
+                  {/each}
+                </select>
+              </label>
+              <p class="muted">
+                Which dongle the VOR navigation panel uses. Same rule — a
+                separate dongle runs alongside ADS-B; the same one pauses it.
+              </p>
             {/if}
           {/if}
           <label class="row">
@@ -735,6 +750,26 @@
         {:else if progress?.finished}
           <p class="muted">Download complete.</p>
         {/if}
+      </div>
+    </details>
+
+    <details>
+      <summary>Updates</summary>
+      <div class="stack section">
+        <label class="row">
+          <span>Check for a newer version on startup</span>
+          <input
+            type="checkbox"
+            checked={s.updateCheckEnabled}
+            on:change={(e) => patch({ updateCheckEnabled: e.currentTarget.checked })}
+          />
+        </label>
+        <p class="muted">
+          Asks GitHub for the latest release once per launch (at most once
+          every 20 h) and shows a banner if one's out. Nothing is downloaded
+          or installed automatically — the banner just links to the release
+          page. Check any time from the About panel.
+        </p>
       </div>
     </details>
   {/if}

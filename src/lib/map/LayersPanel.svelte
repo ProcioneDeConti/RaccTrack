@@ -152,6 +152,7 @@
   <label><input type="checkbox" checked={l.weather} on:change={() => toggle("weather")} /> Weather (METAR)</label>
   <label><input type="checkbox" checked={l.radar} on:change={() => toggle("radar")} /> Weather radar</label>
   <label><input type="checkbox" checked={l.airspace} on:change={() => toggle("airspace")} /> Airspace</label>
+  <label><input type="checkbox" checked={l.navaids} on:change={() => toggle("navaids")} /> Navaids (VOR / NDB)</label>
   <label class:disabled={!$primaryPlace} title={$primaryPlace ? "" : "Add a place first"}>
     <input
       type="checkbox"

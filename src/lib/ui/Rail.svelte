@@ -23,7 +23,8 @@
     $layers.weather ||
     $layers.radar ||
     $layers.airspace ||
-    $layers.rangeRings;
+    $layers.rangeRings ||
+    $layers.navaids;
 
   type Item = {
     id: string;
@@ -53,6 +54,7 @@
       ? ([
           { id: "acars", icon: "message-square", label: "ACARS messages" },
           { id: "modeac", icon: "crosshair", label: "Mode A/C contacts" },
+          { id: "nav", icon: "radio", label: "VOR navigation" },
         ] satisfies Item[])
       : []),
   ] satisfies Item[];

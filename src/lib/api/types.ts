@@ -222,7 +222,49 @@ export interface MapLayers {
   radar: boolean;
   airspace: boolean;
   rangeRings: boolean;
+  /** VOR / VOR-DME / VORTAC / DME / NDB reference overlay. */
+  navaids: boolean;
   aircraft: boolean;
+}
+
+// Bundled navaid reference. Mirrors `src-tauri/src/enrich/navaids.rs`.
+
+export type NavaidKind =
+  | "VOR"
+  | "VOR-DME"
+  | "VORTAC"
+  | "TACAN"
+  | "DME"
+  | "NDB"
+  | "NDB-DME";
+
+export interface Navaid {
+  ident: string;
+  name: string;
+  kind: NavaidKind;
+  /** Raw published frequency, kHz — VOR-family ~108000–117950, NDB ~190–1750. */
+  freqKhz: number;
+  lat: number;
+  lon: number;
+  elevationFt: number | null;
+  country: string | null;
+  /** Station declination — subtract from a true bearing for the magnetic radial. */
+  stationVariationDeg: number | null;
+  usageType: string | null;
+  power: string | null;
+  dmeChannel: string | null;
+  hasDme: boolean;
+  dmeLat: number | null;
+  dmeLon: number | null;
+  associatedAirport: string | null;
+  /** Approximate published service radius (nm) — for a range ring only. */
+  serviceRangeNm: number;
+}
+
+export interface NavaidNear extends Navaid {
+  distanceNm: number;
+  /** True bearing from the query point to the station. */
+  bearingDeg: number;
 }
 
 // Self-collected flight history. Mirrors `src-tauri/src/state.rs`.
@@ -381,6 +423,8 @@ export interface AppSettings {
   /** Which dongle ACARS decoding uses — same independence rationale as
    *  atcDeviceIndex. */
   acarsDeviceIndex: number;
+  /** Which dongle the VOR decoder uses — same independence rationale. */
+  navDeviceIndex: number;
   /** VHF frequencies (MHz) ACARS listens on/scans across. */
   acarsFreqs: number[];
   /** Decode UAT (978MHz) directly off a dongle — a second ADS-B band,
@@ -414,11 +458,26 @@ export interface AppSettings {
   logbookEnabled: boolean;
   tileCacheEnabled: boolean;
   tileCacheMaxMb: number;
+  /** Check GitHub for a newer release on startup and show a banner if one's out. */
+  updateCheckEnabled: boolean;
   units: "imperial" | "metric";
   notificationsEnabled: boolean;
   showAllTrails: boolean;
   /** First-launch safety/data disclaimer (DISCLAIMER.md) has been dismissed. */
   disclaimerAcknowledged: boolean;
+}
+
+// Update check result. Mirrors `src-tauri/src/update.rs::UpdateInfo`.
+export interface UpdateInfo {
+  current: string;
+  latest: string;
+  newer: boolean;
+  url: string;
+  assetUrl: string | null;
+  notes: string | null;
+  publishedAt: string | null;
+  /** Set when the check failed (network/parse); shown on a manual check. */
+  error: string | null;
 }
 
 export interface LocalReceiverProbe {
@@ -463,6 +522,65 @@ export interface AcarsStatus {
   adsbPaused: boolean;
   messageCount: number;
   lastError: string | null;
+}
+
+// RTL-SDR VOR decoder. Mirrors `src-tauri/src/nav/vor.rs`.
+
+export interface VorFixCollected {
+  ident: string;
+  radialMagDeg: number | null;
+  identOk: boolean | null;
+  signal: number;
+}
+
+export interface VorFixResult {
+  lat: number;
+  lon: number;
+  uncertaintyNm: number;
+  /** pairwise crossing points [lat, lon] — the cocked hat. */
+  crossings: [number, number][];
+  lopCount: number;
+  distanceFromPlaceNm: number | null;
+  bearingFromPlaceDeg: number | null;
+}
+
+export interface VorFixStatus {
+  phase: "tuning" | "done" | "failed";
+  stationIndex: number;
+  stationCount: number;
+  currentIdent: string | null;
+  collected: VorFixCollected[];
+  result: VorFixResult | null;
+  error: string | null;
+}
+
+export interface VorStatus {
+  running: boolean;
+  deviceOpen: boolean;
+  tunedKhz: number;
+  freqMhz: number | null;
+  stationIdent: string | null;
+  stationName: string | null;
+  stationKind: string | null;
+  stationLat: number | null;
+  stationLon: number | null;
+  stationVariationDeg: number | null;
+  hasDme: boolean;
+  expectedIdent: string | null;
+  decodedIdent: string | null;
+  /** null until the decoder has produced a group to compare. */
+  identOk: boolean | null;
+  receivedRadialDeg: number | null;
+  geometricRadialDeg: number | null;
+  /** received − geometric, (−180, 180]. */
+  radialDeltaDeg: number | null;
+  distanceNm: number | null;
+  /** rough 0–1 confidence. */
+  signal: number;
+  adsbPaused: boolean;
+  lastError: string | null;
+  /** present while a multi-station position fix is running or just finished. */
+  fix: VorFixStatus | null;
 }
 
 export interface GhostContact {

@@ -51,6 +51,7 @@ See [`FEASIBILITY.md`](./FEASIBILITY.md) for the full research writeup.
 | Live ADS-B (optional) | your own **dump1090-fa / readsb / tar1090** `aircraft.json` | Settings → Local ADS-B receiver. Tried first, community feeds fall back if unreachable. |
 | Aircraft identity | Mictronics DB via [tar1090-db](https://github.com/wiedehopf/tar1090-db) | Bundled `src-tauri/assets/aircraft.csv.gz`. ODC-BY. |
 | Airports | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/airports.csv` (+ `runways.csv`, `airport-frequencies.csv`). Public domain. |
+| Navaids (VOR / DME / NDB) | [OurAirports](https://ourairports.com/data/) | Bundled `src-tauri/assets/navaids.csv`. Public domain. Map overlay only. |
 | Airline callsigns | [OpenFlights](https://openflights.org/data.html) | Bundled `src-tauri/assets/airlines.dat`. ODbL. |
 | Aircraft types | [Mictronics](https://www.mictronics.de/) `types.json` | Bundled `src-tauri/assets/actypes.json`. Engine/wake by ICAO type. |
 | Routes | [hexdb.io](https://hexdb.io) | Cached in SQLite. |
@@ -82,6 +83,8 @@ curl -L -o src-tauri/assets/aircraft.csv.gz \
   https://github.com/wiedehopf/tar1090-db/raw/refs/heads/csv/aircraft.csv.gz
 curl -L -o src-tauri/assets/airports.csv \
   https://davidmegginson.github.io/ourairports-data/airports.csv
+curl -L -o src-tauri/assets/navaids.csv \
+  https://davidmegginson.github.io/ourairports-data/navaids.csv
 curl -L -o src-tauri/assets/airlines.dat \
   https://raw.githubusercontent.com/jpatokal/openflights/master/data/airlines.dat
 curl -L -o src-tauri/assets/actypes.json \

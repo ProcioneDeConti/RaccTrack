@@ -39,6 +39,7 @@
     geofenceDraft,
     coverageEnabled,
     coverageResult,
+    vorStatus,
     layers,
     rangeRingsNm,
     selectedAirport,
@@ -80,6 +81,7 @@
   let unsubDraft: (() => void) | undefined;
   let unsubCoverageEnabled: (() => void) | undefined;
   let unsubCoverageResult: (() => void) | undefined;
+  let unsubVor: (() => void) | undefined;
   /** Non-null while hand-drawing a geofence; mirrors `geofenceDraft`. */
   let draftActive: { placeId: string } | null = null;
   let draftPoints: [number, number][] = [];
@@ -104,6 +106,7 @@
     radar: false,
     airspace: false,
     rangeRings: false,
+    navaids: false,
     aircraft: true,
   };
 
@@ -298,7 +301,13 @@
 
   function refreshOverlays() {
     if (!map || !overlays) return;
-    if (!curLayers.airports && !curLayers.weather && !curLayers.airspace) return;
+    if (
+      !curLayers.airports &&
+      !curLayers.weather &&
+      !curLayers.airspace &&
+      !curLayers.navaids
+    )
+      return;
     const b = map.getBounds();
     void overlays.refresh(
       {
@@ -978,6 +987,21 @@
     };
     unsubCoverageEnabled = coverageEnabled.subscribe(applyCoverage);
     unsubCoverageResult = coverageResult.subscribe(applyCoverage);
+
+    unsubVor = vorStatus.subscribe((v) => {
+      if (!v?.running || v.stationLat == null || v.stationLon == null) {
+        overlays?.setNavRadial(null);
+      } else {
+        overlays?.setNavRadial({
+          lat: v.stationLat,
+          lon: v.stationLon,
+          variationDeg: v.stationVariationDeg ?? 0,
+          receivedMagDeg: v.receivedRadialDeg,
+          geometricMagDeg: v.geometricRadialDeg,
+        });
+      }
+      overlays?.setPositionFix(v?.fix?.result ?? null);
+    });
   });
 
   function placePinSvg(primary: boolean): string {
@@ -1088,6 +1112,7 @@
     unsubDraft?.();
     unsubCoverageEnabled?.();
     unsubCoverageResult?.();
+    unsubVor?.();
     unsubGoHome?.();
     unsubLayers?.();
     unsubRings?.();

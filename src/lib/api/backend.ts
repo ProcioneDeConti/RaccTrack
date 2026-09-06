@@ -19,6 +19,7 @@ import type {
   Sighting,
   SourceStatus,
   TrailPoint,
+  UpdateInfo,
   WatchEntry,
   WatchKind,
 } from "./types";
@@ -198,6 +199,49 @@ export function findAirport(query: string): Promise<Airport[]> {
   return invoke("find_airport", { query });
 }
 
+// --- navaids (VOR / DME / NDB overlay) ---
+
+import type { Navaid, NavaidNear } from "./types";
+
+export function navaidsIn(bbox: Bbox, limit?: number): Promise<Navaid[]> {
+  return invoke("navaids_in", { bbox, limit });
+}
+
+export function navaidInfo(ident: string): Promise<Navaid | null> {
+  return invoke("navaid_info", { ident });
+}
+
+export function nearestNavaids(
+  lat: number,
+  lon: number,
+  maxNm?: number,
+  vorOnly?: boolean,
+): Promise<NavaidNear[]> {
+  return invoke("nearest_navaids", { lat, lon, maxNm, vorOnly });
+}
+
+// --- VOR decoder (RTL-SDR) ---
+
+import type { VorStatus } from "./types";
+
+export function vorTune(ident: string): Promise<void> {
+  return invoke("vor_tune", { ident });
+}
+
+export function vorStop(): Promise<void> {
+  return invoke("vor_stop");
+}
+
+export function getVorStatus(): Promise<VorStatus> {
+  return invoke("vor_status");
+}
+
+/** Start a position fix. Empty `idents` → auto-pick nearby VORs. Progress
+ *  comes back through `vor_status`'s `fix` field. */
+export function vorFixStart(idents: string[] = []): Promise<void> {
+  return invoke("vor_fix_start", { idents });
+}
+
 export function metarsIn(bbox: Bbox): Promise<Metar[]> {
   return invoke("metars_in", { bbox });
 }
@@ -276,6 +320,15 @@ export function updateSettings(
   patch: Partial<AppSettings>,
 ): Promise<AppSettings> {
   return invoke("update_settings", { patch });
+}
+
+// --- update check ---
+
+/** Ask the backend to check GitHub for a newer release. `force` bypasses the
+ *  ~20 h result cache (for the "Check for updates" button). Resolves even on
+ *  failure — inspect `.error`. */
+export function checkForUpdate(force = false): Promise<UpdateInfo> {
+  return invoke("check_for_update", { force });
 }
 
 // --- tile cache ---

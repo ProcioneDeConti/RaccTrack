@@ -276,6 +276,62 @@ pub fn uat_status(state: State<AppState>) -> crate::ingest::uat::UatStatus {
     state.uat.status()
 }
 
+// --- VOR navigation (RTL-SDR) ---
+
+/// Tune the RTL-SDR to a VOR (by bundled navaid ident) and start decoding its
+/// radial + Morse ident. Same single-dongle handoff as ATC/ACARS.
+#[tauri::command]
+pub async fn vor_tune(state: State<'_, AppState>, ident: String) -> CmdResult<()> {
+    let navaid = state
+        .navaids
+        .load()
+        .get(&ident)
+        .cloned()
+        .ok_or_else(|| format!("no navaid '{ident}' in the database"))?;
+    let device_index = state.settings.lock().nav_device_index;
+    state.vor.tune(&navaid, device_index).await.map_err(err)
+}
+
+#[tauri::command]
+pub async fn vor_stop(state: State<'_, AppState>) -> CmdResult<()> {
+    state.vor.stop().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn vor_status(state: State<AppState>) -> crate::nav::vor::VorStatus {
+    state.vor.status()
+}
+
+/// Start a multi-station position fix. `idents` empty → auto-pick nearby VORs
+/// around the primary place; otherwise use exactly those. Progress and the
+/// result come back through `vor_status`'s `fix` field.
+#[tauri::command]
+pub async fn vor_fix_start(state: State<'_, AppState>, idents: Vec<String>) -> CmdResult<()> {
+    let device_index = state.settings.lock().nav_device_index;
+    let stations: Vec<crate::enrich::navaids::Navaid> = {
+        let navaids = state.navaids.load();
+        if idents.is_empty() {
+            let obs = {
+                let s = state.settings.lock();
+                s.places
+                    .iter()
+                    .find(|p| p.primary)
+                    .or_else(|| s.places.first())
+                    .map(|p| (p.lat, p.lon))
+            };
+            let (lat, lon) = obs.ok_or_else(|| {
+                "add a primary place first — a fix needs a rough starting point to pick stations"
+                    .to_string()
+            })?;
+            navaids.fix_candidates(lat, lon)
+        } else {
+            idents.iter().filter_map(|i| navaids.get(i).cloned()).collect()
+        }
+    };
+    state.vor.start_fix(stations, device_index).await.map_err(err)
+}
+
 #[derive(serde::Deserialize)]
 struct GithubAsset {
     name: String,
@@ -488,6 +544,47 @@ pub fn find_airport(
     state.airports.load().find(&query)
 }
 
+// --- navaids (VOR / DME / NDB overlay) ---
+
+#[tauri::command]
+pub fn navaids_in(
+    state: State<AppState>,
+    bbox: Area,
+    limit: Option<usize>,
+) -> Vec<crate::enrich::navaids::Navaid> {
+    let b = bbox.clamped();
+    state
+        .navaids
+        .load()
+        .list_in(b.west, b.south, b.east, b.north, limit.unwrap_or(500))
+}
+
+#[tauri::command]
+pub fn navaid_info(
+    state: State<AppState>,
+    ident: String,
+) -> Option<crate::enrich::navaids::Navaid> {
+    state.navaids.load().get(&ident).cloned()
+}
+
+/// Navaids within `max_nm` of a point, nearest first — `vor_only` keeps just
+/// the bearing-capable VOR family (used by the Phase-3 position fix).
+#[tauri::command]
+pub fn nearest_navaids(
+    state: State<AppState>,
+    lat: f64,
+    lon: f64,
+    max_nm: Option<f64>,
+    vor_only: Option<bool>,
+) -> Vec<crate::enrich::navaids::NavaidNear> {
+    state.navaids.load().nearest(
+        lat,
+        lon,
+        max_nm.unwrap_or(200.0),
+        vor_only.unwrap_or(false),
+    )
+}
+
 #[tauri::command]
 pub async fn metars_in(
     state: State<'_, AppState>,
@@ -601,6 +698,31 @@ pub fn update_settings(
     s.save(&state.db).map_err(err)?;
     state.tiles.set_max_mb(s.tile_cache_max_mb);
     Ok(s.clone())
+}
+
+// --- update check ---
+
+/// Ask GitHub whether a newer release exists. `force` bypasses the ~20 h
+/// result cache (used by the "Check for updates" button; the automatic
+/// startup check leaves it unset). Never errors as a command — a failed
+/// check comes back in `UpdateInfo::error`.
+#[tauri::command]
+pub async fn check_for_update(
+    state: State<'_, AppState>,
+    force: Option<bool>,
+) -> CmdResult<crate::update::UpdateInfo> {
+    let client = reqwest::Client::builder()
+        .user_agent(crate::USER_AGENT)
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(err)?;
+    Ok(crate::update::check(
+        &client,
+        &state.db,
+        crate::util::is_portable(),
+        force.unwrap_or(false),
+    )
+    .await)
 }
 
 // --- tile cache ---

@@ -6,6 +6,8 @@ import type {
   AcarsStatus,
   CoverageResult,
   SourceStatus,
+  UpdateInfo,
+  VorStatus,
 } from "./api/types";
 import { iconKindFor, sizeMulFor } from "./map/icons";
 import { altColor, altColorOnLight, EMERGENCY } from "./theme/colors";
@@ -55,6 +57,10 @@ export const geofenceDraft = writable<{ placeId: string } | null>(null);
 /** Shown on first launch (until acknowledged) and re-openable from About. */
 export const disclaimerOpen = writable(false);
 
+/** Result of the last update check — set by the startup check (App.svelte)
+ *  and the About panel's manual "Check for updates". `null` until one runs. */
+export const updateInfo = writable<UpdateInfo | null>(null);
+
 /** Latest computed RTL-SDR reception polygon, shared between Settings
  *  (triggers the computation) and MapView (renders it). */
 export const coverageResult = writable<CoverageResult | null>(null);
@@ -67,6 +73,8 @@ export const coverageEnabled = writable(false);
 export const atcStatus = writable<AtcStatus | null>(null);
 /** Same polling shape as `atcStatus`, for ACARS decoding. */
 export const acarsStatus = writable<AcarsStatus | null>(null);
+/** Same polling shape, for the RTL-SDR VOR decoder (bearing + ident). */
+export const vorStatus = writable<VorStatus | null>(null);
 
 /** Whether at least one RTL-SDR dongle is currently plugged in (polled in
  *  App.svelte via `listRtlsdrDevices`) — gates the visibility of every
@@ -80,6 +88,7 @@ export const layers = writable<MapLayers>({
   radar: false,
   airspace: false,
   rangeRings: false,
+  navaids: false,
   // Unlike the optional overlays above, aircraft are the core feature, not
   // an opt-in layer — defaults to visible, matching the Rust-side default.
   aircraft: true,

@@ -123,6 +123,10 @@ pub struct AppSettings {
     /// `atc_device_index`.
     #[serde(default)]
     pub acars_device_index: u32,
+    /// Which dongle the VOR decoder uses — same independence rationale; if it
+    /// matches the ADS-B dongle, tuning a VOR pauses ADS-B for the session.
+    #[serde(default)]
+    pub nav_device_index: u32,
     /// VHF frequencies (MHz) ACARS listens on/scans across. Defaults to the
     /// commonly-cited North America primary + secondary channels; 131.550 is
     /// by far the most active one.
@@ -182,6 +186,10 @@ pub struct AppSettings {
     pub logbook_enabled: bool,
     pub tile_cache_enabled: bool,
     pub tile_cache_max_mb: u64,
+    /// Check GitHub for a newer release once on startup and show a banner if
+    /// one's out. No auto-download — just a pointer to the release page.
+    #[serde(default = "default_true")]
+    pub update_check_enabled: bool,
     pub units: String, // "imperial" | "metric"
     pub notifications_enabled: bool,
     pub show_all_trails: bool,
@@ -230,6 +238,9 @@ pub struct MapLayers {
     pub airspace: bool,
     #[serde(default)]
     pub range_rings: bool,
+    /// VOR / VOR-DME / VORTAC / DME / NDB reference overlay.
+    #[serde(default)]
+    pub navaids: bool,
     /// Whether aircraft render at all — unlike the other (opt-in, off by
     /// default) overlays above, this defaults to *on* since aircraft are the
     /// core feature, not an optional layer; existing installs upgrading
@@ -276,6 +287,7 @@ impl Default for AppSettings {
             rtlsdr_device_index: 0,
             atc_device_index: 0,
             acars_device_index: 0,
+            nav_device_index: 0,
             acars_freqs: default_acars_freqs(),
             uat_enabled: false,
             uat_device_index: 0,
@@ -303,6 +315,7 @@ impl Default for AppSettings {
             logbook_enabled: true,
             tile_cache_enabled: false,
             tile_cache_max_mb: 500,
+            update_check_enabled: true,
             units: "imperial".into(),
             notifications_enabled: true,
             show_all_trails: false,

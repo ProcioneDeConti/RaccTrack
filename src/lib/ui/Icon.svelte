@@ -37,6 +37,7 @@
     | "pencil"
     | "plus"
     | "wifi"
+    | "radio"
     | "message-square";
 
   export const ICON_PATHS: Record<IconName, string[]> = {
@@ -128,6 +129,13 @@
     ],
     "message-square": [
       "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+    ],
+    radio: [
+      "M4.9 19.1C1 15.2 1 8.8 4.9 4.9",
+      "M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5",
+      "M14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+      "M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5",
+      "M19.1 4.9C23 8.8 23 15.1 19.1 19",
     ],
   };
 </script>

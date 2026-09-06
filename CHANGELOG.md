@@ -8,6 +8,33 @@ app is pre-1.0, a minor bump may still include breaking changes.
 
 ## [Unreleased]
 
+### Added
+
+- VOR navigation (rail → "VOR navigation", RTL-SDR only): tune a nearby VOR and
+  decode its radial and Morse ident straight off the dongle, shown on a compass
+  dial next to the geometric radial from your primary place (with the
+  difference), plus a signal bar and an ident check. The received and geometric
+  radials are also drawn on the map from the station. Shares the ADS-B dongle
+  (pauses decoding for the session) unless a second one is picked in Settings.
+  Experimental — the DSP is validated only against synthetic signals so far,
+  and it needs a VHF antenna.
+- VOR position fix: "Fix my position" auto-picks a few well-spread nearby VORs,
+  tunes each in turn to hold a radial, then crosses them into a lat/lon with an
+  uncertainty estimate and a bearing/distance from your saved place. The fix,
+  its "cocked hat", and the uncertainty ring are drawn on the map.
+- Navaid map layer (Layers → "Navaids"): VOR / VOR-DME / VORTAC / TACAN / DME
+  and NDB stations from the bundled OurAirports data, drawn with chart-style
+  symbols. Click one for its ident (with Morse), frequency, name, station
+  declination and DME channel; clicking a VOR also draws a compass rose
+  oriented to that station's magnetic variation. Groundwork for RTL-SDR VOR
+  decoding.
+- Update check: on startup (once every 20 h at most) the app asks GitHub for
+  the latest release and shows a dismissible banner if a newer version is
+  out, linking straight to the matching download (installer or portable zip).
+  Nothing is downloaded or installed automatically. There's a "Check for
+  updates" button in the About panel, and the startup check can be turned
+  off under Settings → Updates.
+
 ## [0.3.2] - 2026-09-05
 
 ### Changed

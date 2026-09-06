@@ -5,6 +5,7 @@ pub mod actypes;
 pub mod airlines;
 pub mod airports;
 pub mod country;
+pub mod navaids;
 pub mod photos;
 pub mod routes;
 

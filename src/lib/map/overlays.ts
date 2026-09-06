@@ -9,9 +9,11 @@ import type {
   MapGeoJSONFeature,
 } from "maplibre-gl";
 import type { Bbox } from "./region";
-import type { Airport, MapColors, MapLayers, Metar } from "../api/types";
-import { airportsIn, metarsIn, airspaceIn } from "../api/backend";
+import type { Airport, MapColors, MapLayers, Metar, Navaid } from "../api/types";
+import { airportsIn, metarsIn, airspaceIn, navaidsIn } from "../api/backend";
 import { selectedAirport, selectedHex } from "../state";
+import { registerNavaidIcons, navaidIconFor } from "./navaidIcons";
+import { morseLine } from "../nav/morse";
 import {
   AIRSPACE_STYLE,
   AIRSPACE_FALLBACK,
@@ -84,6 +86,18 @@ export class Overlays {
   /** Current radar tile URL template — survives style swaps so a re-install
    *  re-creates the source with the right frame. */
   private radarUrl: string | null = null;
+
+  /** Last navaid FeatureCollection + compass-rose FeatureCollection — both
+   *  survive style swaps (a fresh style re-adds the sources empty). */
+  private navaidData: unknown = null;
+  private roseData: unknown = null;
+  /** Ident of the VOR whose compass rose is currently drawn (click to toggle). */
+  private selectedNavaid: string | null = null;
+
+  /** Received + geometric radial lines for a tuned VOR (Phase 2). */
+  private navRadialData: unknown = null;
+  /** Multi-VOR position fix: cocked hat + uncertainty ring + point (Phase 3). */
+  private navFixData: unknown = null;
 
   /** Last place-alert ring FeatureCollection — survives style swaps. */
   private placeAlertData: unknown = null;
@@ -304,6 +318,31 @@ export class Overlays {
     if (!m.getSource("ov-airports")) {
       m.addSource("ov-airports", { type: "geojson", data: EMPTY as any });
     }
+    registerNavaidIcons(m);
+    if (!m.getSource("ov-navaids")) {
+      m.addSource("ov-navaids", {
+        type: "geojson",
+        data: (this.navaidData ?? EMPTY) as any,
+      });
+    }
+    if (!m.getSource("ov-navaid-rose")) {
+      m.addSource("ov-navaid-rose", {
+        type: "geojson",
+        data: (this.roseData ?? EMPTY) as any,
+      });
+    }
+    if (!m.getSource("ov-nav-radial")) {
+      m.addSource("ov-nav-radial", {
+        type: "geojson",
+        data: (this.navRadialData ?? EMPTY) as any,
+      });
+    }
+    if (!m.getSource("ov-nav-fix")) {
+      m.addSource("ov-nav-fix", {
+        type: "geojson",
+        data: (this.navFixData ?? EMPTY) as any,
+      });
+    }
     if (!m.getSource("ov-rings")) {
       m.addSource("ov-rings", { type: "geojson", data: EMPTY as any });
     }
@@ -509,10 +548,134 @@ export class Overlays {
       },
     });
 
+    // Compass rose for a selected VOR — dashed ring + radial ticks, oriented
+    // to the station's magnetic declination. Under the navaid symbols.
+    add({
+      id: "ov-navaid-rose-line",
+      type: "line",
+      source: "ov-navaid-rose",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": "#4c9be8",
+        "line-width": ["case", ["==", ["get", "kind"], "cardinal"], 1.6, 1],
+        "line-opacity": 0.7,
+        "line-dasharray": [2, 2],
+      },
+    });
+
+    // Tuned-VOR radials (Phase 2): received solid, geometric dashed. Always
+    // shown when present — driven by the VOR decoder session, not a toggle.
+    // (Two layers rather than one — line-dasharray isn't expression-driven.)
+    add({
+      id: "ov-nav-radial-geo",
+      type: "line",
+      source: "ov-nav-radial",
+      filter: ["==", ["get", "kind"], "geometric"],
+      layout: { "line-cap": "round" },
+      paint: {
+        "line-color": "#8b949e",
+        "line-width": 1.4,
+        "line-opacity": 0.85,
+        "line-dasharray": [3, 2],
+      },
+    });
+    add({
+      id: "ov-nav-radial-recv",
+      type: "line",
+      source: "ov-nav-radial",
+      filter: ["==", ["get", "kind"], "received"],
+      layout: { "line-cap": "round" },
+      paint: { "line-color": "#4c9be8", "line-width": 2.2, "line-opacity": 0.9 },
+    });
+
+    // Position fix (Phase 3) — outline-only (no fill), so the polygon-colour
+    // config rule doesn't apply. Cocked hat + uncertainty ring + centre dot.
+    add({
+      id: "ov-nav-fix-hat",
+      type: "line",
+      source: "ov-nav-fix",
+      filter: ["==", ["get", "kind"], "hat"],
+      paint: { "line-color": "#f0b429", "line-width": 1.2, "line-opacity": 0.8 },
+    });
+    add({
+      id: "ov-nav-fix-ring",
+      type: "line",
+      source: "ov-nav-fix",
+      filter: ["==", ["get", "kind"], "ring"],
+      layout: { "line-cap": "round" },
+      paint: {
+        "line-color": "#f0b429",
+        "line-width": 1.4,
+        "line-dasharray": [2, 2],
+        "line-opacity": 0.9,
+      },
+    });
+    add({
+      id: "ov-nav-fix-dot",
+      type: "circle",
+      source: "ov-nav-fix",
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-radius": 4,
+        "circle-color": "#f0b429",
+        "circle-stroke-color": "#0d1117",
+        "circle-stroke-width": 1.5,
+      },
+    });
+
+    add({
+      id: "ov-navaid-sym",
+      type: "symbol",
+      source: "ov-navaids",
+      layout: {
+        "icon-image": [
+          "match",
+          ["get", "icon"],
+          "vor", "nav-vor",
+          "vordme", "nav-vordme",
+          "vortac", "nav-vortac",
+          "ndb", "nav-ndb",
+          "nav-dme",
+        ],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 9, 0.8, 12, 1],
+        "icon-allow-overlap": false,
+        "icon-padding": 3,
+      },
+    });
+    add({
+      id: "ov-navaid-label",
+      type: "symbol",
+      source: "ov-navaids",
+      minzoom: 7,
+      layout: {
+        "text-field": ["get", "ident"],
+        "text-size": 10,
+        "text-offset": [0, 1],
+        "text-anchor": "top",
+        "text-font": ["Noto Sans Regular", "Open Sans Regular"],
+        "text-optional": true,
+      },
+      paint: {
+        "text-color": "#9ec5ff",
+        "text-halo-color": "#0d1117",
+        "text-halo-width": 1.2,
+      },
+    });
+
     // Event listeners must bind exactly once — install() re-runs on every
     // styledata, and re-binding here fires the airport click N times per click.
     if (!this.handlersBound) {
       this.handlersBound = true;
+      m.on("click", "ov-navaid-sym", (e) => {
+        const f = e.features?.[0];
+        if (f) this.onNavaidClick(e.lngLat, f);
+      });
+      m.on("mouseenter", "ov-navaid-sym", () => {
+        m.getCanvas().style.cursor = "pointer";
+      });
+      m.on("mouseleave", "ov-navaid-sym", () => {
+        m.getCanvas().style.cursor = "";
+      });
       m.on("click", "ov-airport-dot", (e) => {
         const f = e.features?.[0];
         if (f) {
@@ -546,6 +709,11 @@ export class Overlays {
     set("ov-airspace-line", layers.airspace);
     set("ov-airport-dot", layers.airports);
     set("ov-airport-label", layers.airports);
+    set("ov-navaid-sym", layers.navaids);
+    set("ov-navaid-label", layers.navaids);
+    set("ov-navaid-rose-line", layers.navaids);
+    // Drop a stale compass rose when the layer is switched off.
+    if (!layers.navaids && this.selectedNavaid) this.setNavaidRose(null);
     set("ov-rings-casing", layers.rangeRings);
     set("ov-rings-line", layers.rangeRings);
     set("ov-rings-label", layers.rangeRings);
@@ -573,6 +741,15 @@ export class Overlays {
         this.lastAirports = await airportsIn(bbox, zoom < 6 ? 150 : 800);
         this.applyAirportData();
         this.noteFetch("airports", bbox);
+      } catch {
+        /* keep last */
+      }
+    }
+    if (layers.navaids && !this.haveFresh("navaids", bbox, 300_000)) {
+      try {
+        const navaids = await navaidsIn(bbox, zoom < 6 ? 120 : 600);
+        this.applyNavaidData(navaids);
+        this.noteFetch("navaids", bbox);
       } catch {
         /* keep last */
       }
@@ -619,6 +796,212 @@ export class Overlays {
       type: "FeatureCollection",
       features,
     } as any);
+  }
+
+  private applyNavaidData(navaids: Navaid[]) {
+    const features = navaids.map((n) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [n.lon, n.lat] },
+      properties: {
+        ident: n.ident,
+        icon: navaidIconFor(n.kind),
+        // Everything the popup needs, stringified through feature props.
+        name: n.name,
+        kind: n.kind,
+        freqKhz: n.freqKhz,
+        variation: n.stationVariationDeg ?? "",
+        dmeChannel: n.dmeChannel ?? "",
+        associatedAirport: n.associatedAirport ?? "",
+        serviceRangeNm: n.serviceRangeNm,
+      },
+    }));
+    this.navaidData = { type: "FeatureCollection", features };
+    (this.map.getSource("ov-navaids") as GeoJSONSource | undefined)?.setData(
+      this.navaidData as any,
+    );
+  }
+
+  private onNavaidClick(lngLat: any, f: MapGeoJSONFeature) {
+    const p = f.properties ?? {};
+    const ident = String(p.ident ?? "");
+    this.navaidPopup(lngLat, f);
+    // Toggle the compass rose for VOR-family stations.
+    const isVor = ["VOR", "VOR-DME", "VORTAC"].includes(String(p.kind));
+    if (!isVor) {
+      this.setNavaidRose(null);
+      return;
+    }
+    if (this.selectedNavaid === ident) {
+      this.setNavaidRose(null);
+    } else {
+      const [lon, lat] = (f.geometry as any).coordinates as [number, number];
+      this.setNavaidRose({
+        ident,
+        lat,
+        lon,
+        variation: Number(p.variation) || 0,
+        rangeNm: Number(p.serviceRangeNm) || 40,
+      });
+    }
+  }
+
+  /** Draw (or clear, with `null`) a sectional-style compass rose around a VOR:
+   *  a dashed ring plus 10°/30° radial ticks rotated to the station's magnetic
+   *  declination, so a tick labelled 360 points at magnetic north. */
+  setNavaidRose(
+    n: { ident: string; lat: number; lon: number; variation: number; rangeNm: number } | null,
+  ) {
+    const src = this.map.getSource("ov-navaid-rose") as GeoJSONSource | undefined;
+    if (!n) {
+      this.selectedNavaid = null;
+      this.roseData = EMPTY;
+      src?.setData(EMPTY as any);
+      return;
+    }
+    this.selectedNavaid = n.ident;
+    const rNm = Math.max(6, Math.min(n.rangeNm, 12));
+    const features: any[] = [
+      {
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: circle(n.lat, n.lon, rNm) },
+        properties: { kind: "ring" },
+      },
+    ];
+    // Magnetic radial R points at true bearing (R + variation).
+    for (let r = 0; r < 360; r += 10) {
+      const major = r % 30 === 0;
+      const inner = rNm * (major ? 0.82 : 0.9);
+      const trueBrg = r + n.variation;
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            destination(n.lat, n.lon, inner, trueBrg),
+            destination(n.lat, n.lon, rNm, trueBrg),
+          ],
+        },
+        properties: { kind: r === 0 ? "cardinal" : "tick" },
+      });
+    }
+    this.roseData = { type: "FeatureCollection", features };
+    src?.setData(this.roseData as any);
+  }
+
+  /** Draw the tuned VOR's received + geometric radials as lines out from the
+   *  station (Phase 2). Radials are magnetic; `variationDeg` converts to the
+   *  true bearing for drawing. `null` clears them. */
+  setNavRadial(
+    n: {
+      lat: number;
+      lon: number;
+      variationDeg: number;
+      receivedMagDeg: number | null;
+      geometricMagDeg: number | null;
+      lengthNm?: number;
+    } | null,
+  ) {
+    const src = this.map.getSource("ov-nav-radial") as GeoJSONSource | undefined;
+    if (!n) {
+      this.navRadialData = EMPTY;
+      src?.setData(EMPTY as any);
+      return;
+    }
+    const len = n.lengthNm ?? 60;
+    const features: any[] = [];
+    const push = (magDeg: number, kind: string) => {
+      features.push({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [n.lon, n.lat],
+            destination(n.lat, n.lon, len, magDeg + n.variationDeg),
+          ],
+        },
+        properties: { kind },
+      });
+    };
+    if (n.geometricMagDeg != null) push(n.geometricMagDeg, "geometric");
+    if (n.receivedMagDeg != null) push(n.receivedMagDeg, "received");
+    this.navRadialData = { type: "FeatureCollection", features };
+    src?.setData(this.navRadialData as any);
+  }
+
+  /** Draw a computed position fix (Phase 3): the cocked-hat triangle from the
+   *  pairwise crossings, a dashed uncertainty ring, and a point at the fix.
+   *  `null` clears it. */
+  setPositionFix(
+    f: {
+      lat: number;
+      lon: number;
+      uncertaintyNm: number;
+      crossings: [number, number][];
+    } | null,
+  ) {
+    const src = this.map.getSource("ov-nav-fix") as GeoJSONSource | undefined;
+    if (!f) {
+      this.navFixData = EMPTY;
+      src?.setData(EMPTY as any);
+      return;
+    }
+    const features: any[] = [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [f.lon, f.lat] },
+        properties: { kind: "dot" },
+      },
+      {
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: circle(f.lat, f.lon, Math.max(f.uncertaintyNm, 0.3)),
+        },
+        properties: { kind: "ring" },
+      },
+    ];
+    if (f.crossings.length >= 3) {
+      const ring = f.crossings.map(([la, lo]) => [lo, la] as [number, number]);
+      ring.push(ring[0]);
+      features.push({
+        type: "Feature",
+        geometry: { type: "LineString", coordinates: ring },
+        properties: { kind: "hat" },
+      });
+    }
+    this.navFixData = { type: "FeatureCollection", features };
+    src?.setData(this.navFixData as any);
+  }
+
+  private navaidPopup(lngLat: any, f: MapGeoJSONFeature) {
+    const p = f.properties ?? {};
+    const kind = String(p.kind ?? "");
+    const ndb = kind.startsWith("NDB");
+    const khz = Number(p.freqKhz) || 0;
+    const freq = ndb ? `${khz} kHz` : `${(khz / 1000).toFixed(2)} MHz`;
+    const ident = String(p.ident ?? "");
+    const varNum = p.variation === "" ? null : Number(p.variation);
+    const varStr =
+      varNum === null || !Number.isFinite(varNum)
+        ? ""
+        : `${Math.abs(varNum).toFixed(0)}°${varNum >= 0 ? "E" : "W"}`;
+    const rows: string[] = [
+      `<div style="opacity:.8">${escapeHtml(kind)} · ${escapeHtml(freq)}</div>`,
+      `<div style="opacity:.7;font-family:monospace;letter-spacing:1px;margin-top:2px">${escapeHtml(morseLine(ident))}</div>`,
+    ];
+    if (p.name) rows.push(`<div style="opacity:.7;margin-top:3px">${escapeHtml(String(p.name))}</div>`);
+    const meta: string[] = [];
+    if (varStr) meta.push(`var ${varStr}`);
+    if (p.dmeChannel) meta.push(`Ch ${escapeHtml(String(p.dmeChannel))}`);
+    if (p.associatedAirport) meta.push(escapeHtml(String(p.associatedAirport)));
+    if (meta.length)
+      rows.push(`<div style="opacity:.55;margin-top:3px;font-size:11px">${meta.join(" · ")}</div>`);
+    new maplibregl.Popup({ closeButton: true, maxWidth: "240px" })
+      .setLngLat(lngLat)
+      .setHTML(
+        `<div><div style="font-weight:700;font-size:13px">${escapeHtml(ident)}</div>${rows.join("")}</div>`,
+      )
+      .addTo(this.map);
   }
 
   setRangeRings(

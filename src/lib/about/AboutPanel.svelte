@@ -2,12 +2,22 @@
   import Panel from "../ui/Panel.svelte";
   import Icon from "../ui/Icon.svelte";
   import RaccoonMark from "../ui/RaccoonMark.svelte";
-  import { openExternal } from "../api/backend";
-  import { disclaimerOpen } from "../state";
+  import { openExternal, checkForUpdate } from "../api/backend";
+  import { disclaimerOpen, updateInfo } from "../state";
 
   export let onClose: () => void;
 
   const version = __APP_VERSION__;
+
+  let checking = false;
+  async function checkUpdates() {
+    checking = true;
+    try {
+      updateInfo.set(await checkForUpdate(true));
+    } finally {
+      checking = false;
+    }
+  }
   const repo = "https://github.com/ProcioneDeConti/RaccTrack";
 
   const stack = [
@@ -21,7 +31,7 @@
 
   const data: { label: string; url: string; note: string }[] = [
     { label: "adsb.lol · adsb.fi", url: "https://adsb.lol/", note: "live aircraft (ODbL)" },
-    { label: "OurAirports", url: "https://ourairports.com/", note: "airports & runways" },
+    { label: "OurAirports", url: "https://ourairports.com/", note: "airports, runways, navaids" },
     { label: "Mictronics", url: "https://www.mictronics.de/", note: "aircraft & type database" },
     { label: "OpenFlights", url: "https://openflights.org/", note: "airline callsigns" },
     { label: "hexdb.io", url: "https://hexdb.io/", note: "route lookups" },
@@ -54,6 +64,27 @@
     schedule, gate or delay data: there's no free source for it, and the app
     says so where it matters.
   </p>
+
+  <div class="upd">
+    <button class="row" on:click={checkUpdates} disabled={checking}>
+      <Icon name="refresh-cw" size={13} />
+      <span>{checking ? "Checking…" : "Check for updates"}</span>
+    </button>
+    {#if $updateInfo}
+      {#if $updateInfo.error}
+        <p class="upd-msg bad">Couldn't check — {$updateInfo.error}</p>
+      {:else if $updateInfo.newer}
+        <p class="upd-msg ok">
+          v{$updateInfo.latest} is available —
+          <button class="lnk" on:click={() => open($updateInfo.assetUrl ?? $updateInfo.url)}>download</button>
+          ·
+          <button class="lnk" on:click={() => open($updateInfo.url)}>what's new</button>
+        </p>
+      {:else}
+        <p class="upd-msg">You're on the latest version.</p>
+      {/if}
+    {/if}
+  </div>
 
   <div class="links">
     <button class="row" on:click={() => open(repo)}>
@@ -152,6 +183,24 @@
   }
   .row:hover {
     border-color: var(--accent);
+  }
+  .row:disabled {
+    opacity: 0.6;
+  }
+  .upd {
+    margin-bottom: 12px;
+  }
+  .upd-msg {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin: 6px 2px 0;
+    line-height: 1.5;
+  }
+  .upd-msg.ok {
+    color: var(--ok);
+  }
+  .upd-msg.bad {
+    color: var(--emergency);
   }
   .credit {
     font-size: 12px;

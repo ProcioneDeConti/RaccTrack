@@ -22,14 +22,9 @@ pub fn now_ms() -> i64 {
 pub fn resolve_data_dir(handle: &tauri::AppHandle) -> std::io::Result<PathBuf> {
     use tauri::Manager;
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            if exe_dir.join("portable.txt").exists() {
-                let dir = exe_dir.join("data");
-                std::fs::create_dir_all(&dir)?;
-                return Ok(dir);
-            }
-        }
+    if let Some(dir) = portable_data_dir() {
+        std::fs::create_dir_all(&dir)?;
+        return Ok(dir);
     }
     let dir = handle
         .path()
@@ -37,4 +32,22 @@ pub fn resolve_data_dir(handle: &tauri::AppHandle) -> std::io::Result<PathBuf> {
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     std::fs::create_dir_all(&dir)?;
     Ok(dir)
+}
+
+/// The portable-mode data directory (`data/` next to the executable), or
+/// `None` when the `portable.txt` marker file isn't present — i.e. a normal
+/// installed copy. See `resolve_data_dir` for the rationale.
+fn portable_data_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    exe_dir
+        .join("portable.txt")
+        .exists()
+        .then(|| exe_dir.join("data"))
+}
+
+/// Whether this copy is running in portable mode — used by the update check
+/// to point the user at the matching download (portable zip vs. installer).
+pub fn is_portable() -> bool {
+    portable_data_dir().is_some()
 }

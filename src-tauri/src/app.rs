@@ -16,6 +16,7 @@ use crate::config::AppSettings;
 use crate::datalink::Datalink;
 use crate::db::Db;
 use crate::enrich::airports::Airports;
+use crate::enrich::navaids::Navaids;
 use crate::enrich::Enricher;
 use crate::geocode::Geocoder;
 use crate::history::History;
@@ -45,6 +46,8 @@ pub struct AppState {
     pub acars: Arc<AcarsListener>,
     /// Direct UAT (978MHz) reception — see `ingest::uat`.
     pub uat: Arc<crate::ingest::uat::UatSource>,
+    /// RTL-SDR VOR bearing/ident decoder — see `nav::vor`.
+    pub vor: Arc<crate::nav::vor::VorListener>,
     pub enricher: Arc<Enricher>,
     pub alerts: Arc<Alerts>,
     pub history: Arc<History>,
@@ -57,6 +60,8 @@ pub struct AppState {
     pub charts: Arc<Charts>,
     pub datalink: Arc<Datalink>,
     pub airports: Arc<ArcSwap<Airports>>,
+    /// Bundled navaid reference (VOR/DME/NDB…) for the map overlay.
+    pub navaids: Arc<ArcSwap<Navaids>>,
     pub db: Arc<Db>,
     pub settings: Arc<Mutex<AppSettings>>,
     pub viewport: Arc<Mutex<Option<Area>>>,
